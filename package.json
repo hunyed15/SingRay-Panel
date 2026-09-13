@@ -1,0 +1,21 @@
+{
+  "name": "singray-panel",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/server",
+    "apps/web",
+    "packages/shared",
+    "tools/migrate"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/server & npm run dev --workspace apps/web",
+    "dev:server": "npm run dev --workspace apps/server",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace packages/shared && npm run build --workspace apps/server && npm run build --workspace apps/web",
+    "test": "npm run test --workspace apps/server && npm run test --workspace packages/shared && npm run test --workspace tools/migrate",
+    "typecheck": "tsc -b apps/server packages/shared tools/migrate",
+    "lint": "eslint .",
+    "migrate": "node tools/migrate/src/cli.ts"
+  }
+}

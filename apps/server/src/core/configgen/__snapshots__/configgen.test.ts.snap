@@ -1,0 +1,533 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: http-auth 1`] = `
+{
+  "listen": "::",
+  "listen_port": 31001,
+  "tag": "relay-in-31001",
+  "type": "http",
+  "users": [
+    {
+      "password": "p1",
+      "username": "u1",
+    },
+  ],
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: hysteria 1`] = `
+{
+  "listen": "::",
+  "listen_port": 31001,
+  "tag": "relay-in-31001",
+  "tls": {
+    "certificate_path": "/etc/singray/cert.pem",
+    "enabled": true,
+    "key_path": "/etc/singray/key.pem",
+    "server_name": "corenet.example.com",
+  },
+  "type": "hysteria2",
+  "users": [
+    {
+      "password": "hy-pass",
+    },
+  ],
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: naive 1`] = `
+{
+  "listen": "::",
+  "listen_port": 31001,
+  "tag": "relay-in-31001",
+  "tls": {
+    "certificate_path": "/etc/singray/cert.pem",
+    "enabled": true,
+    "key_path": "/etc/singray/key.pem",
+    "server_name": "corenet.example.com",
+  },
+  "type": "naive",
+  "users": [
+    {
+      "password": "naive-pass",
+      "username": "nusr",
+    },
+  ],
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: shadowtls 1`] = `
+{
+  "handshake": {
+    "server": "www.google.com",
+    "server_port": 443,
+  },
+  "listen": "::",
+  "listen_port": 31001,
+  "tag": "relay-in-31001",
+  "type": "shadowtls",
+  "users": [
+    {
+      "password": "stls-pass",
+    },
+  ],
+  "version": 3,
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: socks-anon 1`] = `
+{
+  "listen": "::",
+  "listen_port": 31001,
+  "tag": "relay-in-31001",
+  "type": "socks",
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: socks-auth 1`] = `
+{
+  "listen": "::",
+  "listen_port": 31001,
+  "tag": "relay-in-31001",
+  "type": "socks",
+  "users": [
+    {
+      "password": "p1",
+      "username": "u1",
+    },
+  ],
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: ss2022 1`] = `
+{
+  "listen": "::",
+  "listen_port": 31001,
+  "method": "2022-blake3-aes-128-gcm",
+  "password": "ss-pass",
+  "tag": "relay-in-31001",
+  "type": "shadowsocks",
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: trojan-tls 1`] = `
+{
+  "listen": "::",
+  "listen_port": 31001,
+  "tag": "relay-in-31001",
+  "tls": {
+    "certificate_path": "/etc/singray/cert.pem",
+    "enabled": true,
+    "key_path": "/etc/singray/key.pem",
+    "server_name": "corenet.example.com",
+  },
+  "type": "trojan",
+  "users": [
+    {
+      "password": "trojan-pass",
+    },
+  ],
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: tuic 1`] = `
+{
+  "congestion_control": "bbr",
+  "listen": "::",
+  "listen_port": 31001,
+  "tag": "relay-in-31001",
+  "tls": {
+    "certificate_path": "/etc/singray/cert.pem",
+    "enabled": true,
+    "key_path": "/etc/singray/key.pem",
+    "server_name": "corenet.example.com",
+  },
+  "type": "tuic",
+  "users": [
+    {
+      "password": "tuic-pass",
+      "uuid": "t-uuid-0003",
+    },
+  ],
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: tunnel 1`] = `
+{
+  "listen": "::",
+  "listen_port": 31001,
+  "network": "tcp",
+  "override_address": "10.0.0.5",
+  "override_port": 443,
+  "tag": "relay-in-31001",
+  "type": "direct",
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: vless-reality 1`] = `
+{
+  "listen": "::",
+  "listen_port": 31001,
+  "tag": "relay-in-31001",
+  "tls": {
+    "enabled": true,
+    "reality": {
+      "enabled": true,
+      "handshake": {
+        "server": "dl.google.com",
+        "server_port": 443,
+      },
+      "private_key": "RPK_PRIVATE_SAMPLE",
+      "short_id": [
+        "0123abcd",
+      ],
+    },
+    "server_name": "dl.google.com",
+  },
+  "type": "vless",
+  "users": [
+    {
+      "uuid": "u-uuid-0001",
+    },
+  ],
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > inbound: vmess-ws-tls 1`] = `
+{
+  "listen": "::",
+  "listen_port": 31001,
+  "tag": "relay-in-31001",
+  "tls": {
+    "certificate_path": "/etc/singray/cert.pem",
+    "enabled": true,
+    "key_path": "/etc/singray/key.pem",
+    "server_name": "corenet.example.com",
+  },
+  "transport": {
+    "path": "/ws-a1b2",
+    "type": "ws",
+  },
+  "type": "vmess",
+  "users": [
+    {
+      "alterId": 0,
+      "uuid": "v-uuid-0002",
+    },
+  ],
+}
+`;
+
+exports[`singbox configgen golden snapshots (11 templates) > machine config with relay node + landing shared inbound 1`] = `
+{
+  "inbounds": [
+    {
+      "listen": "::",
+      "listen_port": 31001,
+      "tag": "relay-in-31001",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "dl.google.com",
+            "server_port": 443,
+          },
+          "private_key": "RPK_PRIVATE_SAMPLE",
+          "short_id": [
+            "0123abcd",
+          ],
+        },
+        "server_name": "dl.google.com",
+      },
+      "type": "vless",
+      "users": [
+        {
+          "uuid": "relay-uuid",
+        },
+      ],
+    },
+  ],
+  "log": {
+    "level": "info",
+    "timestamp": true,
+  },
+  "outbounds": [
+    {
+      "tag": "direct",
+      "type": "direct",
+    },
+    {
+      "method": "2022-blake3-aes-128-gcm",
+      "password": "ss2022-sample-password",
+      "server": "landing.example.com",
+      "server_port": 20408,
+      "tag": "landing-11",
+      "type": "shadowsocks",
+    },
+  ],
+  "route": {
+    "final": "direct",
+    "rules": [
+      {
+        "inbound": [
+          "relay-in-31001",
+        ],
+        "outbound": "landing-11",
+      },
+    ],
+  },
+}
+`;
+
+exports[`xray configgen golden snapshots (6 templates) > inbound: http-auth 1`] = `
+{
+  "listen": "0.0.0.0",
+  "port": 41001,
+  "protocol": "http",
+  "settings": {
+    "accounts": [
+      {
+        "pass": "p",
+        "user": "u",
+      },
+    ],
+  },
+  "tag": "relay-in-41001",
+}
+`;
+
+exports[`xray configgen golden snapshots (6 templates) > inbound: shadowsocks 1`] = `
+{
+  "listen": "0.0.0.0",
+  "port": 41001,
+  "protocol": "shadowsocks",
+  "settings": {
+    "method": "aes-128-gcm",
+    "password": "xss-pass",
+  },
+  "tag": "relay-in-41001",
+}
+`;
+
+exports[`xray configgen golden snapshots (6 templates) > inbound: socks-auth 1`] = `
+{
+  "listen": "0.0.0.0",
+  "port": 41001,
+  "protocol": "socks",
+  "settings": {
+    "accounts": [
+      {
+        "pass": "p",
+        "user": "u",
+      },
+    ],
+    "auth": "password",
+    "udp": true,
+  },
+  "tag": "relay-in-41001",
+}
+`;
+
+exports[`xray configgen golden snapshots (6 templates) > inbound: trojan-tls 1`] = `
+{
+  "listen": "0.0.0.0",
+  "port": 41001,
+  "protocol": "trojan",
+  "settings": {
+    "clients": [
+      {
+        "password": "xt-pass",
+      },
+    ],
+  },
+  "sniffing": {
+    "destOverride": [
+      "http",
+      "tls",
+    ],
+    "enabled": true,
+  },
+  "streamSettings": {
+    "network": "tcp",
+    "security": "tls",
+    "tlsSettings": {
+      "certificates": [
+        {
+          "certificateFile": "/etc/singray/cert.pem",
+          "keyFile": "/etc/singray/key.pem",
+        },
+      ],
+    },
+  },
+  "tag": "relay-in-41001",
+}
+`;
+
+exports[`xray configgen golden snapshots (6 templates) > inbound: vless-reality 1`] = `
+{
+  "listen": "0.0.0.0",
+  "port": 41001,
+  "protocol": "vless",
+  "settings": {
+    "clients": [
+      {
+        "flow": "xtls-rprx-vision",
+        "id": "x-uuid-0001",
+      },
+    ],
+    "decryption": "none",
+  },
+  "sniffing": {
+    "destOverride": [
+      "http",
+      "tls",
+    ],
+    "enabled": true,
+  },
+  "streamSettings": {
+    "network": "tcp",
+    "realitySettings": {
+      "dest": "dl.google.com:443",
+      "privateKey": "RPK_PRIVATE_SAMPLE",
+      "serverNames": [
+        "dl.google.com",
+      ],
+      "shortIds": [
+        "0123abcd",
+      ],
+      "xver": 0,
+    },
+    "security": "reality",
+  },
+  "tag": "relay-in-41001",
+}
+`;
+
+exports[`xray configgen golden snapshots (6 templates) > inbound: vmess-ws-tls 1`] = `
+{
+  "listen": "0.0.0.0",
+  "port": 41001,
+  "protocol": "vmess",
+  "settings": {
+    "clients": [
+      {
+        "alterId": 0,
+        "id": "x-uuid-0002",
+      },
+    ],
+  },
+  "sniffing": {
+    "destOverride": [
+      "http",
+      "tls",
+    ],
+    "enabled": true,
+  },
+  "streamSettings": {
+    "network": "ws",
+    "security": "tls",
+    "tlsSettings": {
+      "certificates": [
+        {
+          "certificateFile": "/etc/singray/cert.pem",
+          "keyFile": "/etc/singray/key.pem",
+        },
+      ],
+    },
+    "wsSettings": {
+      "path": "/ws-x",
+    },
+  },
+  "tag": "relay-in-41001",
+}
+`;
+
+exports[`xray configgen golden snapshots (6 templates) > machine config: vless relay chain + landing shared ss inbound 1`] = `
+{
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 41001,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "flow": "xtls-rprx-vision",
+            "id": "xr-uuid",
+          },
+        ],
+        "decryption": "none",
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls",
+        ],
+        "enabled": true,
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "realitySettings": {
+          "dest": "dl.google.com:443",
+          "privateKey": "RPK_PRIVATE_SAMPLE",
+          "serverNames": [
+            "dl.google.com",
+          ],
+          "shortIds": [
+            "0123abcd",
+          ],
+          "xver": 0,
+        },
+        "security": "reality",
+      },
+      "tag": "relay-in-41001",
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 20409,
+      "protocol": "shadowsocks",
+      "settings": {
+        "method": "aes-128-gcm",
+        "password": "xlanding-pass",
+      },
+      "tag": "landing-in-20409",
+    },
+  ],
+  "log": {
+    "loglevel": "warning",
+  },
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct",
+    },
+    {
+      "protocol": "shadowsocks",
+      "settings": {
+        "servers": [
+          {
+            "address": "landing.example.com",
+            "method": "2022-blake3-aes-128-gcm",
+            "password": "ss2022-sample-password",
+            "port": 20408,
+          },
+        ],
+      },
+      "tag": "landing-71",
+    },
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "inboundTag": [
+          "relay-in-41001",
+        ],
+        "outboundTag": "landing-71",
+        "type": "field",
+      },
+    ],
+  },
+}
+`;

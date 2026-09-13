@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+data/
+*.db
+panel.db
+tmp-test/
+clash-sub.yaml

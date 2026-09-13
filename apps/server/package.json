@@ -1,0 +1,27 @@
+{
+  "name": "@singray/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/jwt": "^9.0.0",
+    "@singray/shared": "*",
+    "bcryptjs": "^3.0.3",
+    "fastify": "^5.2.0",
+    "ssh2": "^1.17.0",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ssh2": "^1.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
