@@ -33,6 +33,8 @@ const updateSchema = z.object({
   outboundType: z.enum(['direct', 'relay']).optional(),
   landingServerId: z.coerce.number().int().optional(),
   note: z.string().optional(),
+  authUser: z.string().optional(),
+  authPassword: z.string().optional(),
 });
 
 const idParam = z.object({ id: z.coerce.number().int() });

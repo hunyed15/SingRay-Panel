@@ -57,3 +57,11 @@ export function genRealityKeypair(): { publicKey: string; privateKey: string } {
 export function genRandomHex(bytes = 12): string {
   return crypto.randomBytes(bytes).toString('hex');
 }
+
+/** URL/链接友好的可读密码(纯字母数字,无 base64 的 +/= 特殊字符) */
+export function genPassword(length = 24): string {
+  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let out = '';
+  for (let i = 0; i < length; i++) out += charset[crypto.randomBytes(1)[0] % charset.length];
+  return out;
+}

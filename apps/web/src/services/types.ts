@@ -182,6 +182,8 @@ export interface XrayNodeItem {
   share_link: string | null;
   note: string;
   created_at: string;
+  auth_user?: string;
+  auth_password?: string;
 }
 
 export interface XrayNodeCreateInput {
@@ -206,6 +208,8 @@ export interface XrayNodePatch {
   flow?: string;
   outboundType?: OutboundType;
   landingServerId?: number;
+  authUser?: string;
+  authPassword?: string;
 }
 
 // ---------- 节点测速 ----------

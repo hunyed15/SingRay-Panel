@@ -1,5 +1,5 @@
 // Xray 节点模板 + 凭据生成(移植自旧 xrayconfig/templates.js)
-import { genUuid, genSsPassword, genRandomHex } from '../core/crypto.js';
+import { genUuid, genSsPassword, genRandomHex, genPassword } from '../core/crypto.js';
 
 /** Xray 模板 → 协议/TLS/传输 */
 export const XRAY_TEMPLATE_META: Record<string, { protocol: string; tlsMode: string; transport: string }> = {
@@ -34,8 +34,8 @@ export function genXrayNodeCreds(protocol: string, flow: string): Record<string,
       return { method: 'aes-128-gcm', password: genSsPassword() };
     case 'socks':
     case 'http':
-      // 无认证的 socks/http 会被扫描滥用,默认生成凭据
-      return { username: genRandomHex(8), password: genSsPassword() };
+      // 无认证的 socks/http 会被扫描滥用,默认生成凭据(URL 安全可读字符集)
+      return { username: genRandomHex(8), password: genPassword() };
     default:
       return {};
   }

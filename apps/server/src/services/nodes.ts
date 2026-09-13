@@ -2,6 +2,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from './errors.js';
 import { encryptJson, decryptJson, type NodeCreds } from './creds.js';
+import { genRandomHex, genPassword } from '../core/crypto.js';
 import { TEMPLATE_META, PROTOCOL_DEFAULTS, genNodeCreds, nodeDefaults } from './templates.js';
 import { randomFreePort, assertPortFree } from './ports.js';
 import { buildShareLink, type NodeView } from '../core/subscribe/index.js';
@@ -135,12 +136,15 @@ export function getNode(db: DatabaseSync, id: number) {
   return nodeItem(db, loadRow(db, id));
 }
 
-/** socks/http 可选用户名密码认证(留空 = 开放代理,易被扫描滥用) */
+/** socks/http 认证:用户填写优先;两项皆空时自动生成(无认证的开放代理会被扫描滥用) */
 function applyAuthCreds(creds: NodeCreds, authUser?: string, authPassword?: string): void {
   if (authUser || authPassword) {
     if (!authUser || !authPassword) throw new HttpError(400, '认证需要同时填写用户名与密码');
     creds.username = String(authUser).trim();
     creds.password = String(authPassword);
+  } else if (!creds.username && !creds.password) {
+    creds.username = genRandomHex(8);
+    creds.password = genPassword();
   }
 }
 

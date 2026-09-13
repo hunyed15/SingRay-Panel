@@ -2,6 +2,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from './errors.js';
 import { encryptJson, decryptJson } from './creds.js';
+import { genRandomHex, genPassword } from '../core/crypto.js';
 import { XRAY_TEMPLATE_META, XRAY_PROTOCOL_DEFAULTS, genXrayNodeCreds, xrayNodeDefaults } from './xray_templates.js';
 import { randomFreePort, assertPortFree } from './ports.js';
 import { buildShareLink, type NodeView } from '../core/subscribe/index.js';
@@ -28,6 +29,9 @@ export interface XrayNodeUpdateInput {
   outboundType?: 'direct' | 'relay';
   landingServerId?: number;
   note?: string;
+  /** socks/http 认证(用户未填且为空时由生成值兜底) */
+  authUser?: string;
+  authPassword?: string;
 }
 
 const SELECT_JOIN = `SELECT n.*, s.name AS server_name, g.name AS landing_name
@@ -83,6 +87,8 @@ function nodeItem(db: DatabaseSync, row: NodeRow) {
     landing_name: row.landing_name || undefined,
     tunnel_address: row.tunnel_address || undefined,
     tunnel_port: row.tunnel_port ?? undefined,
+    auth_user: row.protocol === 'socks' || row.protocol === 'http' ? (decryptJson(row.creds_enc) as any).username : undefined,
+    auth_password: row.protocol === 'socks' || row.protocol === 'http' ? (decryptJson(row.creds_enc) as any).password : undefined,
     share_link: (() => {
       const view = toView(db, row);
       return view ? buildShareLink(view) : null;
@@ -180,6 +186,19 @@ export function updateXrayNode(db: DatabaseSync, id: number, b: XrayNodeUpdateIn
     wsPath = defaults.wsPath;
   } else if (b.sni !== undefined && protocol === 'vless') {
     sni = b.sni.trim() || sni;
+  }
+
+  // socks/http 认证覆盖:用户填写优先;为空且原凭据为空时生成(防无认证裸奔)
+  if ((protocol === 'socks' || protocol === 'http') && (b.authUser !== undefined || b.authPassword !== undefined)) {
+    creds = {
+      username: b.authUser?.trim() || creds.username || genRandomHex(8),
+      password: b.authPassword || creds.password || genPassword(),
+    };
+  } else if (protocol === 'socks' || protocol === 'http') {
+    creds = {
+      username: creds.username || genRandomHex(8),
+      password: creds.password || genPassword(),
+    };
   }
 
   const outboundType = b.outboundType ?? row.outbound_type;

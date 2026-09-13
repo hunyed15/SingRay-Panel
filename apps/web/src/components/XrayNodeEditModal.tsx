@@ -41,6 +41,8 @@ interface FormValues {
   landingServerId?: number;
   sni?: string;
   flow?: string;
+  authUser?: string;
+  authPassword?: string;
 }
 
 const PROTOCOL_OPTIONS = (Object.keys(XRAY_PROTOCOL_META) as XrayNodeProtocol[]).map((p) => ({
@@ -86,6 +88,8 @@ export function XrayNodeEditModal({
       landingServerId: node.landing_server_id,
       sni: node.sni,
       flow: node.flow || 'xtls-rprx-vision',
+      authUser: node.auth_user,
+      authPassword: node.auth_password,
     });
   }, [open, node, form]);
 
@@ -111,6 +115,10 @@ export function XrayNodeEditModal({
         sni: values.protocol === 'vless' ? values.sni : undefined,
         flow:
           values.protocol === 'vless' ? values.flow || 'xtls-rprx-vision' : undefined,
+        authUser:
+          values.protocol === 'socks' || values.protocol === 'http' ? values.authUser : undefined,
+        authPassword:
+          values.protocol === 'socks' || values.protocol === 'http' ? values.authPassword : undefined,
       });
       message.success('已保存');
       onSaved(saved);
@@ -197,6 +205,25 @@ export function XrayNodeEditModal({
               <Input placeholder="xtls-rprx-vision" />
             </Form.Item>
           </>
+        )}
+        {(protocol === 'socks' || protocol === 'http') && (
+          <Flex gap={16}>
+            <Form.Item
+              name="authUser"
+              label="认证用户名"
+              rules={[{ required: true, message: '请输入用户名' }]}
+              style={{ flex: 1 }}
+            >
+              <Input placeholder="用户名(留空则沿用已生成的)" />
+            </Form.Item>
+            <Form.Item
+              name="authPassword"
+              label="认证密码"
+              style={{ flex: 1 }}
+            >
+              <Input placeholder="留空则沿用已生成的密码" />
+            </Form.Item>
+          </Flex>
         )}
       </Form>
     </Modal>
