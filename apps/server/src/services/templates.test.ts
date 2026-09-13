@@ -19,9 +19,11 @@ describe('singbox templates (ported from old templates.js)', () => {
     expect(genNodeCreds('shadowsocks')).toMatchObject({ method: '2022-blake3-aes-128-gcm' });
     expect(genNodeCreds('tuic')).toHaveProperty('uuid');
     expect(genNodeCreds('tuic')).toHaveProperty('password');
-    // tunnel/socks/http 无凭据字段
+    // tunnel 无凭据;socks/http 默认生成凭据(防扫描滥用)
     expect(genNodeCreds('tunnel')).toEqual({});
-    expect(genNodeCreds('socks')).toEqual({});
+    expect(genNodeCreds('socks')).toHaveProperty('username');
+    expect(genNodeCreds('socks')).toHaveProperty('password');
+    expect(genNodeCreds('http')).toHaveProperty('password');
   });
 
   it('nodeDefaults picks default sni per protocol', () => {
@@ -48,7 +50,8 @@ describe('xray templates (ported from old xrayconfig/templates.js)', () => {
     expect(vless.uuid).toMatch(/^[0-9a-f-]{36}$/);
     expect(vless.flow).toBe('xtls-rprx-vision');
     expect(genXrayNodeCreds('shadowsocks', '')).toMatchObject({ method: 'aes-128-gcm' });
-    expect(genXrayNodeCreds('socks', '')).toEqual({});
+    expect(genXrayNodeCreds('socks', '')).toHaveProperty('username');
+    expect(genXrayNodeCreds('http', '')).toHaveProperty('password');
   });
 
   it('xrayNodeDefaults: vmess ws path prefixed /xray-ws-', () => {

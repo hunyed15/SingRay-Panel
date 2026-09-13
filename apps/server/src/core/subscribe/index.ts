@@ -65,8 +65,14 @@ export function buildShareLink(view: NodeView): string | null {
       return `hysteria2://${encodeURIComponent(c.password)}@${host}:${port}?sni=${sni}&insecure=1#${enc}`;
     case 'tuic':
       return `tuic://${c.uuid}:${encodeURIComponent(c.password)}@${host}:${port}?congestion_control=bbr&sni=${sni}&allow_insecure=1#${enc}`;
-    case 'socks':
-    case 'http':
+    case 'socks': {
+      const auth = c.username ? `${encodeURIComponent(c.username)}:${encodeURIComponent(c.password)}@` : '';
+      return `socks5://${auth}${host}:${port}#${enc}`;
+    }
+    case 'http': {
+      const auth = c.username ? `${encodeURIComponent(c.username)}:${encodeURIComponent(c.password)}@` : '';
+      return `http://${auth}${host}:${port}#${enc}`;
+    }
     case 'shadowtls':
     case 'naive':
     case 'tunnel':

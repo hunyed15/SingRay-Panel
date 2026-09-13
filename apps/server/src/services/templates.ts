@@ -50,6 +50,10 @@ export function genNodeCreds(protocol: string): Record<string, string> {
       return { password: genSsPassword() };
     case 'naive':
       return { username: genRandomHex(4), password: genSsPassword() };
+    case 'socks':
+    case 'http':
+      // 无认证的 socks/http 会被扫描滥用,默认生成凭据
+      return { username: genRandomHex(8), password: genSsPassword() };
     default:
       return {};
   }

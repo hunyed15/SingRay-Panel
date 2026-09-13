@@ -32,6 +32,10 @@ export function genXrayNodeCreds(protocol: string, flow: string): Record<string,
       return { password: genSsPassword() };
     case 'shadowsocks':
       return { method: 'aes-128-gcm', password: genSsPassword() };
+    case 'socks':
+    case 'http':
+      // 无认证的 socks/http 会被扫描滥用,默认生成凭据
+      return { username: genRandomHex(8), password: genSsPassword() };
     default:
       return {};
   }

@@ -132,7 +132,7 @@ describe('nodes service (db roundtrip)', () => {
     });
     expect(n.auth_user).toBe('alice');
     expect(n.auth_password).toBe('pw123');
-    expect(n.share_link).toBeNull(); // socks 不生成分享链接
+    expect(n.share_link).toBe('socks5://alice:pw123@10.0.0.1:30010#s1'); // socks 带认证的分享链接
     const trojan = createNode(db, { template: 'trojan-tls', name: 't1', serverId: relay.id, port: 30011 });
     expect(trojan.auth_user).toBeUndefined();
     expect(trojan.auth_password).toBeUndefined();
