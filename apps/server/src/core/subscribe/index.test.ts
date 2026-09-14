@@ -51,10 +51,18 @@ describe('subscribe', () => {
     expect(out.split('\n')).toHaveLength(2);
   });
 
-  it('toSingboxConfig builds selector + direct, singbox UA picks singbox format', () => {
-    const cfg = toSingboxConfig([vless, ss]) as { outbounds: { tag: string }[]; route: { final: string } };
-    expect(cfg.outbounds.map((o) => o.tag)).toEqual(['HK-VLESS', 'HK-SS', 'auto', 'direct']);
-    expect(cfg.route.final).toBe('auto');
+  it('toSingboxConfig builds mobile-ready config (tun inbound + selector + urltest + direct)', () => {
+    const cfg = toSingboxConfig([vless, ss]) as {
+      inbounds: { type: string; auto_route?: boolean }[];
+      outbounds: { tag: string }[];
+      route: { final: string; rule_set?: unknown[] };
+    };
+    // 手机端必需:tun 入口
+    expect(cfg.inbounds.some((i) => i.type === 'tun' && i.auto_route === true)).toBe(true);
+    // 出站:节点 + PROXY 选择器 + auto 自动测速 + direct/block
+    expect(cfg.outbounds.map((o) => o.tag)).toEqual(['HK-VLESS', 'HK-SS', 'PROXY', 'auto', 'direct', 'block']);
+    expect(cfg.route.final).toBe('PROXY');
+    expect(cfg.route.rule_set?.length).toBeGreaterThan(0);
     expect(pickFormat({}, 'sing-box/1.13 CLI')).toBe('singbox');
     expect(pickFormat({}, 'v2rayN/6')).toBe('base64');
     expect(pickFormat({ format: 'singbox' }, '')).toBe('singbox');
