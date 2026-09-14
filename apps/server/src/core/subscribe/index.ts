@@ -210,6 +210,8 @@ export function toSingboxConfig(views: NodeView[]): Record<string, unknown> {
       ],
       final: 'PROXY',
       auto_detect_interface: true,
+      // sing-box 1.12+ 必需:否则核心拒绝启动(missing default_domain_resolver)
+      default_domain_resolver: { server: 'local-dns' },
     },
   };
 }
