@@ -135,13 +135,16 @@ export async function applyForward(
   }
   // 确保 socat 二进制存在(显式安装,不是降级)
   await execFn(conn, `(command -v socat >/dev/null || (apt-get update -qq && apt-get install -y -qq socat) || (yum install -y -q socat))`, { timeoutClass: 'install' });
+  // IPv6 目标需要 TCP6 + 方括号地址(socat 语法:TCP6:[2607:...]:443)
+  const isV6 = spec.landingHost.includes(':');
+  const socatTarget = isV6 ? `TCP6:[${spec.landingHost}]:${spec.targetPort}` : `TCP:${spec.landingHost}:${spec.targetPort}`;
   const unitContent = [
     '[Unit]',
     `Description=SingRayPanel port forward ${spec.entryPort} -> ${spec.landingHost}:${spec.targetPort}`,
     'After=network.target',
     '',
     '[Service]',
-    'ExecStart=/usr/bin/socat TCP-LISTEN:' + spec.entryPort + ',fork,reuseaddr TCP:' + spec.landingHost + ':' + spec.targetPort,
+    'ExecStart=/usr/bin/socat TCP-LISTEN:' + spec.entryPort + ',fork,reuseaddr ' + socatTarget,
     'Restart=always',
     'RestartSec=3',
     '',

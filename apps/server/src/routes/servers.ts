@@ -22,6 +22,8 @@ const createSchema = z.object({
   sshAuthSecret: z.string().optional(),
   sshSudo: z.boolean().optional(),
   region: z.string().optional(),
+  /** SSH 跳板机(经它隧道连接);null = 清空(直连) */
+  jumpServerId: z.coerce.number().int().nullable().optional(),
 });
 
 const updateSchema = createSchema.partial();

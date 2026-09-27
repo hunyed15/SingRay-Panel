@@ -54,6 +54,28 @@ describe('forward: iptables (explicit mechanism)', () => {
   });
 });
 
+describe('forward: socat IPv6 targets', () => {
+  it('uses TCP6 with bracketed address for IPv6 landing host', async () => {
+    const { calls, execFn } = recordingExec();
+    const writes: { path: string; content: string }[] = [];
+    await applyForward(
+      conn,
+      { ...spec, mechanism: 'socat', landingHost: '2607:8140:212:122::' },
+      false,
+      execFn,
+      async (_conn, path, content) => { writes.push({ path, content }); },
+    );
+    expect(writes[0].content).toContain('socat TCP-LISTEN:31001,fork,reuseaddr TCP6:[2607:8140:212:122::]:41001');
+  });
+
+  it('uses TCP (no brackets) for IPv4 landing host', async () => {
+    const { execFn } = recordingExec();
+    const writes: { path: string; content: string }[] = [];
+    await applyForward(conn, { ...spec, mechanism: 'socat' }, false, execFn, async (_c, path, content) => { writes.push({ path, content }); });
+    expect(writes[0].content).toContain('socat TCP-LISTEN:31001,fork,reuseaddr TCP:10.0.0.9:41001');
+  });
+});
+
 describe('forward: preflight', () => {
   it('collects hard and soft issues explicitly', async () => {
     const { execFn } = recordingExec({

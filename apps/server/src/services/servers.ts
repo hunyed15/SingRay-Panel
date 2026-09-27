@@ -25,6 +25,7 @@ export interface ServerRow {
   xray_ping_status: string;
   xray_last_seen: string | null;
   last_seen: string | null;
+  jump_server_id: number | null;
 }
 
 export interface ServerInput {
@@ -39,6 +40,8 @@ export interface ServerInput {
   sshAuthSecret?: string;
   sshSudo?: boolean;
   region?: string;
+  /** SSH 跳板机(null = 直连) */
+  jumpServerId?: number | null;
 }
 
 const SELECT_ALL = 'SELECT * FROM servers';
@@ -89,8 +92,8 @@ export function createServer(db: DatabaseSync, b: ServerInput): Omit<ServerRow, 
   const sshSecret = control === 'ssh' ? encryptSecret(b.sshAuthSecret ?? '') : '';
   const info = db
     .prepare(
-      `INSERT INTO servers (name, role, control, host, client_host, ssh_port, ssh_user, ssh_auth_type, ssh_auth_secret, ssh_sudo, region)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO servers (name, role, control, host, client_host, ssh_port, ssh_user, ssh_auth_type, ssh_auth_secret, ssh_sudo, region, jump_server_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .run(
       b.name,
@@ -104,6 +107,7 @@ export function createServer(db: DatabaseSync, b: ServerInput): Omit<ServerRow, 
       sshSecret,
       b.sshSudo ? 1 : 0,
       b.region ?? '',
+      b.jumpServerId ?? null,
     );
   const id = Number(info.lastInsertRowid);
   createRoleSettings(db, id, b.role);
@@ -121,7 +125,7 @@ export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput)
     db.prepare('UPDATE servers SET ssh_auth_secret = ? WHERE id = ?').run(encryptSecret(b.sshAuthSecret), id);
   }
   db.prepare(
-    `UPDATE servers SET name=?, role=?, control=?, host=?, client_host=?, ssh_port=?, ssh_user=?, ssh_auth_type=?, ssh_sudo=?, region=?
+    `UPDATE servers SET name=?, role=?, control=?, host=?, client_host=?, ssh_port=?, ssh_user=?, ssh_auth_type=?, ssh_sudo=?, region=?, jump_server_id=?
      WHERE id=?`,
   ).run(
     b.name ?? row.name,
@@ -134,6 +138,8 @@ export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput)
     b.sshAuthType ?? row.ssh_auth_type,
     b.sshSudo !== undefined ? (b.sshSudo ? 1 : 0) : row.ssh_sudo,
     b.region ?? row.region,
+    // jumpServerId:显式传 null 清空,传数字设置,不传保持原值
+    b.jumpServerId !== undefined ? b.jumpServerId : row.jump_server_id,
     id,
   );
 
