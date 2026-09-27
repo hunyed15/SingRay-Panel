@@ -236,6 +236,11 @@ export interface Settings {
   /** 订阅里 Reality 节点地址:true=IP(绕开慢 DNS) / false=域名 */
   singboxRealityIp: boolean;
   xrayRealityIp: boolean;
+  /** Cloudflare Token 是否已配置(不回传明文) */
+  cfTokenSet: boolean;
+  cfTokenSource: 'db' | 'env' | 'none';
+  tgBotTokenSet: boolean;
+  tgChatId: string;
 }
 
 // ---------- 中转规则(端口转发) ----------

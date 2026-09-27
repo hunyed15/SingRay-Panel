@@ -181,8 +181,20 @@ export const setSlug = (subSlug: string): Promise<Settings> =>
 
 /** 更新订阅 Reality 地址模式等设置 */
 export const updateSettings = (
-  patch: { singboxRealityIp?: boolean; xrayRealityIp?: boolean },
+  patch: {
+    singboxRealityIp?: boolean;
+    xrayRealityIp?: boolean;
+    subSlug?: string;
+    /** 空字符串 = 清除(回退 env) */
+    cfToken?: string;
+    tgBotToken?: string;
+    tgChatId?: string;
+  },
 ): Promise<Settings> => request<Settings>('/api/settings', { method: 'PUT', body: patch });
+
+/** 发送 Telegram 测试消息 */
+export const testTelegram = (): Promise<{ delivered: boolean }> =>
+  request<{ delivered: boolean }>('/api/system/test-telegram', { method: 'POST' });
 
 // ---------- 中转规则 ----------
 

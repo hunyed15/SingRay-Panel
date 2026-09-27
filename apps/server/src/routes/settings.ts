@@ -8,6 +8,10 @@ const putSchema = z.object({
   subSlug: z.string({ message: 'subSlug 必填' }).optional(),
   singboxRealityIp: z.boolean().optional(),
   xrayRealityIp: z.boolean().optional(),
+  /** 空字符串 = 清除 DB 值(回退 env 兜底) */
+  cfToken: z.string().optional(),
+  tgBotToken: z.string().optional(),
+  tgChatId: z.string().optional(),
 });
 
 export default async function settingsRoutes(app: FastifyInstance): Promise<void> {

@@ -13,11 +13,13 @@ const createSchema = z.object({
   name: z.string().min(1, 'name 必填'),
   entryServerId: z.coerce.number().int(),
   landingServerId: z.coerce.number().int(),
-  targetNodeType: z.enum(['singbox', 'xray']),
-  targetNodeId: z.coerce.number().int(),
+  // 'port' = 纯端口转发(两跳中转的中间跳;不绑定节点,只需 targetPort)
+  targetNodeType: z.enum(['singbox', 'xray', 'port']),
+  targetNodeId: z.coerce.number().int().optional(),
   entryPort: z.coerce.number().int().optional(),
   targetPort: z.coerce.number().int(),
   mechanism: z.enum(['iptables', 'socat']).default('socat'), // 实测容器环境 iptables DNAT 静默失效,默认 socat
+  includeInSub: z.boolean().optional(),
   note: z.string().optional(),
 });
 
@@ -63,9 +65,13 @@ export default async function portForwardRoutes(app: FastifyInstance): Promise<v
     const b = createSchema.parse(req.body);
     const entry = getServer(db, b.entryServerId);
     const landing = getServer(db, b.landingServerId);
-    const table = b.targetNodeType === 'singbox' ? 'nodes' : 'xray_nodes';
-    if (!db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(b.targetNodeId)) {
-      throw new HttpError(400, `目标 ${b.targetNodeType === 'singbox' ? 'SingBox' : 'Xray'} 节点不存在`);
+    // 'port' 模式(两跳中转中间跳)不需要节点;其余模式校验节点存在
+    let nodeId = b.targetNodeId ?? 0;
+    if (b.targetNodeType !== 'port') {
+      const table = b.targetNodeType === 'singbox' ? 'nodes' : 'xray_nodes';
+      if (!nodeId || !db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(nodeId)) {
+        throw new HttpError(400, `目标 ${b.targetNodeType === 'singbox' ? 'SingBox' : 'Xray'} 节点不存在`);
+      }
     }
     const port = b.entryPort || 20000 + Math.floor(Math.random() * 40000);
     if (db.prepare('SELECT id FROM port_forwards WHERE entry_server_id = ? AND entry_port = ?').get(b.entryServerId, port)) {
@@ -77,9 +83,9 @@ export default async function portForwardRoutes(app: FastifyInstance): Promise<v
 
     // 先落库拿 id(规则的 singray:<id> 标签用于 reconcile 对账),写规则失败则回删
     const info = db.prepare(
-      `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, note)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-    ).run(b.name, b.entryServerId, b.landingServerId, b.targetNodeType, b.targetNodeId, port, b.targetPort, b.mechanism, b.note ?? '');
+      `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, include_in_sub, note)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    ).run(b.name, b.entryServerId, b.landingServerId, b.targetNodeType, nodeId, port, b.targetPort, b.mechanism, b.includeInSub ? 1 : 0, b.note ?? '');
     const rowId = Number(info.lastInsertRowid);
 
     try {

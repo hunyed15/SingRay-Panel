@@ -24,6 +24,8 @@ export const config = {
   backupHour: Number(process.env.PANEL_BACKUP_HOUR ?? 4),
   // 运维:健康检查间隔(分钟)
   healthIntervalMin: Number(process.env.PANEL_HEALTH_INTERVAL ?? 5),
+  // ACME DNS-01:Cloudflare API Token(配置后证书签发走 DNS-01,无需 80 端口)
+  cfToken: process.env.PANEL_CF_TOKEN ?? '',
   // 告警:Telegram Bot(未配置 = 仅落库不推送)
   tgBotToken: process.env.TG_BOT_TOKEN ?? '',
   tgChatId: process.env.TG_CHAT_ID ?? '',

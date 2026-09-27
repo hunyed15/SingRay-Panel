@@ -22,6 +22,13 @@ export default async function systemRoutes(app: FastifyInstance): Promise<void> 
     return { ok: true, file: r.file, size: r.size };
   });
 
+  /** 发送 Telegram 测试消息(验证告警配置) */
+  app.post('/test-telegram', async () => {
+    const { sendAlert } = await import('../core/alerts.js');
+    const r = await sendAlert(getDb(), 'SingRayPanel 测试消息', '如果你看到这条消息,说明告警配置正确。');
+    return { delivered: r.delivered };
+  });
+
   /** 立即执行一轮健康检查 */
   app.post('/healthcheck', async () => {
     const summary = await runHealthCheckCycle(getDb());

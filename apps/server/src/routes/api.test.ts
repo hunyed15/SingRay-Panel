@@ -137,6 +137,10 @@ describe('api integration (fastify.inject)', () => {
       subUrl: '/sub/singbox/my-slug_1',
       singboxRealityIp: true,
       xrayRealityIp: true,
+      cfTokenSet: false,
+      cfTokenSource: 'none',
+      tgBotTokenSet: false,
+      tgChatId: '',
     });
   });
 

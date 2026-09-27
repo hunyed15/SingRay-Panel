@@ -2,7 +2,7 @@
 // 所有告警同时写入 job_runs(job='alert'),运维状态页可回溯。
 
 import type { DatabaseSync } from 'node:sqlite';
-import { config } from '../config.js';
+import { resolveTgConfig } from '../services/settings.js';
 
 export async function sendAlert(db: DatabaseSync, title: string, detail = ''): Promise<{ delivered: boolean }> {
   db.prepare("INSERT INTO job_runs (job, ok, detail) VALUES ('alert', 1, ?)").run(
@@ -10,12 +10,13 @@ export async function sendAlert(db: DatabaseSync, title: string, detail = ''): P
   );
   pruneRuns(db);
 
-  if (!config.tgBotToken || !config.tgChatId) return { delivered: false };
+  const tg = resolveTgConfig(db);
+  if (!tg.botToken || !tg.chatId) return { delivered: false };
   try {
-    const res = await fetch(`https://api.telegram.org/bot${config.tgBotToken}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${tg.botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: config.tgChatId, text: detail ? `${title}\n${detail}` : title }),
+      body: JSON.stringify({ chat_id: tg.chatId, text: detail ? `${title}\n${detail}` : title }),
       signal: AbortSignal.timeout(10_000),
     });
     return { delivered: res.ok };

@@ -6,7 +6,8 @@ import { getDb } from '../db/client.js';
 import { serverLifecycle } from '../services/lifecycle.js';
 import { batchCreateNodes } from '../services/batchNodes.js';
 import { markDirty } from '../services/deployState.js';
-import { certStatus, issueCert, hasRealCert } from '../core/certs/acme.js';
+import { certStatus, issueCert, hasRealCert, dns01Available } from '../core/certs/acme.js';
+import { resolveCfToken } from '../services/settings.js';
 import { serverConn } from '../services/conn.js';
 import { decrypt } from '../core/crypto.js';
 import { config } from '../config.js';
@@ -75,7 +76,9 @@ export default async function lifecycleRoutes(app: FastifyInstance): Promise<voi
     const domain = row.client_host || row.host;
     const conn = serverConn(getDb(), id);
     const [st, supported] = await Promise.all([certStatus(conn, domain), hasRealCert(conn, domain)]);
-    return { ...st, domain, certSupported: supported };
+    const db = getDb();
+    const dns = dns01Available(db);
+    return { ...st, domain, certSupported: supported, dns01: dns, certMethods: dns ? ['dns-01', 'http-01'] : ['http-01'] };
   });
 
   /** 签发 ACME 证书(standalone HTTP-01,需 80 端口空闲且域名解析到本机) */
@@ -89,7 +92,7 @@ export default async function lifecycleRoutes(app: FastifyInstance): Promise<voi
     }
     const conn = serverConn(getDb(), id);
     try {
-      const r = await issueCert(conn, domain);
+      const r = await issueCert(conn, domain, undefined, resolveCfToken(getDb()));
       // 新证书要随部署进入核心配置 → 标记双核心待部署
       markDirty(getDb(), id, 'singbox');
       markDirty(getDb(), id, 'xray');
