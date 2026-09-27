@@ -5,13 +5,14 @@ import { jobStatus } from '../core/scheduler.js';
 import { listBackups, runBackupNow } from '../core/backup.js';
 import { runHealthCheckCycle } from '../core/healthcheck.js';
 import { config } from '../config.js';
+import { resolveTgConfig } from '../services/settings.js';
 
 export default async function systemRoutes(app: FastifyInstance): Promise<void> {
   /** 调度器状态 + 备份清单 + TG 配置状态(设置页运维卡片) */
   app.get('/status', async () => ({
     jobs: jobStatus(),
     backups: listBackups(),
-    tgConfigured: Boolean(config.tgBotToken && config.tgChatId),
+    tgConfigured: (() => { const t = resolveTgConfig(getDb()); return Boolean(t.botToken && t.chatId); })(),
     healthIntervalMin: config.healthIntervalMin,
     backupRetention: config.backupRetention,
   }));

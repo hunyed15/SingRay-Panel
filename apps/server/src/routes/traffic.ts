@@ -4,7 +4,7 @@ import { getDb } from '../db/client.js';
 import { todaySummary, collectAllTraffic } from '../core/traffic.js';
 import { listPendingDeploys } from '../services/deployState.js';
 import { jobStatus } from '../core/scheduler.js';
-import { config } from '../config.js';
+import { resolveTgConfig } from '../services/settings.js';
 
 export default async function trafficRoutes(app: FastifyInstance): Promise<void> {
   /** 今日流量(按节点 + 汇总) */
@@ -31,7 +31,7 @@ export default async function trafficRoutes(app: FastifyInstance): Promise<void>
       traffic: { date: traffic.date, totalUp: traffic.totalUp, totalDown: traffic.totalDown, top: traffic.nodes.slice(0, 10) },
       alerts,
       scheduler: jobStatus(),
-      tgConfigured: Boolean(config.tgBotToken && config.tgChatId),
+      tgConfigured: (() => { const t = resolveTgConfig(db); return Boolean(t.botToken && t.chatId); })(),
     };
   });
 }

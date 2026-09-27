@@ -1,4 +1,4 @@
-import { Alert, App, Button, Card, Flex, Table, Tag, Typography } from 'antd';
+import { App, Button, Card, Flex, Table, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import { DatabaseOutlined, SafetyOutlined } from '@ant-design/icons';
@@ -88,19 +88,6 @@ export function OpsCard() {
             {status?.backupRetention ?? '-'} 份 · 健康检查每 {status?.healthIntervalMin ?? '-'} 分钟
           </Typography.Text>
         </Flex>
-
-        <Alert
-          type={status?.tgConfigured ? 'success' : 'warning'}
-          showIcon
-          message={status?.tgConfigured ? 'Telegram 告警已配置(机器离线/核心停止/证书临期将推送)' : 'Telegram 告警未配置(告警仅落库)'}
-          description={
-            status?.tgConfigured ? undefined : (
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                在面板服务器环境变量中配置 TG_BOT_TOKEN 与 TG_CHAT_ID 后重启面板即可启用推送。
-              </Typography.Text>
-            )
-          }
-        />
 
         <Typography.Text strong>调度任务</Typography.Text>
         <Table<api.SystemJobStatus> rowKey="name" columns={runColumns} dataSource={status?.jobs ?? []} pagination={false} size="small" loading={loading} />
