@@ -9,10 +9,10 @@ const db = new DatabaseSync('/opt/singray/data/panel.db');
 const srv = db.prepare("SELECT * FROM servers WHERE name = 'Dedirock'").get();
 const conn = new Client();
 conn.on('ready', () => {
-  conn.exec("curl -s -m 10 http://127.0.0.1:18482/ 2>&1 | head -c 60; echo; xray api statsquery --server=127.0.0.1:18482 -pattern 'inbound>>>' 2>&1 | head -c 200; echo; grep -c policy /etc/xray/config.json", (e, s) => {
+  conn.exec("xray api statsquery --server=127.0.0.1:18482 -pattern 'inbound>>>' 2>&1 | head -c 400", (e, s) => {
     let o = '';
     s.on('data', (d) => (o += d));
     s.stderr.on('data', (d) => (o += d));
-    s.on('close', () => { console.log('DEDIROCK:', o.slice(0, 400)); conn.end(); process.exit(0); });
+    s.on('close', () => { console.log('DEDIROCK STATS:', o.slice(0, 380)); conn.end(); process.exit(0); });
   });
-}).on('error', (e) => { console.log('ERR:', e.message); process.exit(1); }).connect({ host: srv.host, port: srv.ssh_port, username: srv.ssh_user, privateKey: dec(srv.ssh_auth_secret) });
+}).on('error', (e) => { console.log('ERR:', e.message); process.exit(1); }).connect({ host: srv.host, port: srv.ssh_port, username: srv.ssh_user, password: dec(srv.ssh_auth_secret) });

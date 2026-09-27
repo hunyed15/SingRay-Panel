@@ -21,7 +21,11 @@ const PORT_RE = /^(relay|landing)-in-(\d+)$/;
 export function parseStatsQueryOutput(core: 'singbox' | 'xray', stdout: string): TagStat[] {
   let parsed: { stat?: { name: string; value: string }[]; stats?: { name: string; value: string }[] };
   try {
-    parsed = JSON.parse(stdout.slice(stdout.indexOf('{')));
+    // xray api 输出可能带前后缀文本(日志/提示)——取第一个 { 到最后一个 } 之间的纯 JSON
+    const start = stdout.indexOf('{');
+    const end = stdout.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) return [];
+    parsed = JSON.parse(stdout.slice(start, end + 1));
   } catch {
     return [];
   }
@@ -75,7 +79,10 @@ export async function collectMachineTraffic(db: DatabaseSync, serverId: number):
       const stats = parseStatsQueryOutput(core, rawOut);
       if (stats.length === 0) {
         // 诊断可见性:空结果时抛出原始输出片段(核心未含 stats / 命令失败 / 无计数器)
-        throw new Error(`empty-stats raw[${rawOut.length}]: ${rawOut.slice(0, 120).replace(/\s+/g, ' ')}`);
+        const rawParsed = (() => { try { return JSON.parse(rawOut.slice(rawOut.indexOf('{'))); } catch { return {}; } })();
+        const statKey = rawParsed.stat ? 'stat' : rawParsed.stats ? 'stats' : 'NONE';
+        const statLen = Array.isArray(rawParsed.stat) ? rawParsed.stat.length : Array.isArray(rawParsed.stats) ? rawParsed.stats.length : -1;
+        throw new Error(`empty-stats statKey=${statKey} statLen=${statLen} raw[${rawOut.length}]: ${rawOut.slice(0, 150).replace(/\s+/g, ' ')}`);
       }
       const ins = db.prepare(
         'INSERT INTO traffic_samples (server_id, core, tag, uplink, downlink) VALUES (?,?,?,?,?)',
