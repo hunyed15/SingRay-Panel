@@ -19,14 +19,16 @@ const PORT_RE = /^(relay|landing)-in-(\d+)$/;
 
 /** 解析 xray api statsquery 输出 → 每入站上下行(纯函数,可测) */
 export function parseStatsQueryOutput(core: 'singbox' | 'xray', stdout: string): TagStat[] {
-  let parsed: { stats?: { name: string; value: string }[] };
+  let parsed: { stat?: { name: string; value: string }[]; stats?: { name: string; value: string }[] };
   try {
     parsed = JSON.parse(stdout.slice(stdout.indexOf('{')));
   } catch {
     return [];
   }
+  // Xray 26.x 返回 "stat"(单数),老版返回 "stats"(复数)——兼容两种
+  const statList = parsed.stat ?? parsed.stats ?? [];
   const out = new Map<string, TagStat>();
-  for (const s of parsed.stats ?? []) {
+  for (const s of statList) {
     // name 形如 inbound>>>relay-in-31001>>>traffic>>>uplink
     const m = s.name.match(/^inbound>>>([^>]+)>>>traffic>>>(uplink|downlink)$/);
     if (!m) continue;
