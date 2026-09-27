@@ -69,6 +69,11 @@ export function buildShareLink(view: NodeView): string | null {
       return `ss://${b64url(`${c.method}:${c.password}`)}@${host}:${port}#${enc}`;
     case 'hysteria':
       return `hysteria2://${encodeURIComponent(c.password)}@${host}:${port}?sni=${sni}&insecure=1#${enc}`;
+    case 'anytls':
+      return (
+        `anytls://${encodeURIComponent(c.password)}@${host}:${port}?security=reality&sni=${sni}` +
+        `&fp=chrome&pbk=${view.realityPublicKey}&sid=${view.shortId}#${enc}`
+      );
     case 'tuic':
       return `tuic://${c.uuid}:${encodeURIComponent(c.password)}@${host}:${port}?congestion_control=bbr&sni=${sni}&allow_insecure=1#${enc}`;
     case 'socks': {
@@ -129,6 +134,20 @@ function buildClientOutbound(view: NodeView): Record<string, unknown> | null {
         uuid: c.uuid,
         tls: tlsInsecure(host),
         transport: { type: 'ws', path: ws_path },
+      };
+    case 'anytls':
+      return {
+        type: 'anytls',
+        tag,
+        server: host,
+        server_port: port,
+        password: c.password,
+        tls: {
+          enabled: true,
+          server_name: sni,
+          utls: { enabled: true, fingerprint: 'chrome' },
+          reality: { enabled: true, public_key: view.realityPublicKey, short_id: view.shortId },
+        },
       };
     case 'trojan':
       return { type: 'trojan', tag, server: host, server_port: port, password: c.password, tls: tlsInsecure(host) };

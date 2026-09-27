@@ -85,6 +85,16 @@ export function clashProxy(v: NodeView): Record<string, YamlValue> | null {
         network: 'ws',
         'ws-opts': { path: v.ws_path || '/' },
       };
+    case 'anytls':
+      return {
+        ...base,
+        type: 'anytls',
+        password: c.password,
+        sni: v.sni,
+        'client-fingerprint': 'chrome',
+        'reality-opts': { 'public-key': v.realityPublicKey ?? '', 'short-id': v.shortId ?? '' },
+        udp: true,
+      };
     case 'trojan':
       return { ...base, type: 'trojan', password: c.password, udp: true, sni: v.sni, 'skip-cert-verify': true };
     case 'shadowsocks':

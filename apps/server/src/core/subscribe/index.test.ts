@@ -46,6 +46,13 @@ describe('subscribe', () => {
     expect(buildShareLink({ ...ss, protocol: 'tunnel' })).toBeNull();
   });
 
+  it('anytls share link carries reality params', () => {
+    const link = buildShareLink({ ...vless, protocol: 'anytls', creds: { password: 'apass' } })!;
+    expect(link).toMatch(/^anytls:\/\/apass@/);
+    expect(link).toContain('security=reality');
+    expect(link).toContain('pbk=PBK123');
+  });
+
   it('toBase64 joins lines and encodes', () => {
     const out = Buffer.from(toBase64([vless, ss]), 'base64').toString('utf8');
     expect(out.split('\n')).toHaveLength(2);
