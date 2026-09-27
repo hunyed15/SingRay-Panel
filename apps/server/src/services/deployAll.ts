@@ -220,7 +220,14 @@ export async function deployServerBothCores(
       const cfg = buildMachineConfig({ machine: sbData.machine, landingSettings: sbData.landingSettings ?? undefined, nodes: sbData.nodes, landings: sbData.landings });
       const r = await deployCore(conn, { core: 'singbox', config: cfg, execFn: inject?.execFn, writeFileFn: inject?.writeFileFn });
       base.singbox = { ok: r.ok, error: r.error, steps: [...(sbAutoInstall ? ['auto-install'] : []), ...certSteps, ...r.steps.map((s) => s.step + (s.ok ? '' : '(fail)'))], journal: r.journal };
-      if (r.ok) clearDirtyCore(db, serverId, 'singbox');
+      if (r.ok) {
+        clearDirtyCore(db, serverId, 'singbox');
+        // 部署成功后查询核心版本并写库(否则版本信息只在 install 时更新)
+        try {
+          const v = await (inject?.execFn ?? exec)(conn, 'sing-box version 2>/dev/null | head -1', { timeoutClass: 'quick' });
+          db.prepare('UPDATE servers SET singbox_version = ? WHERE id = ?').run(v.stdout.trim(), serverId);
+        } catch { /* 版本查询失败不阻断 */ }
+      }
     } catch (err) {
       base.singbox = { ok: false, error: (err as Error).message, steps: [] };
     }
@@ -258,7 +265,13 @@ export async function deployServerBothCores(
       const cfg = buildXrayConfig({ machine: xrData.machine, nodes: xrData.nodes, landings: xrData.landings, xrayLandingSettings: xrData.xrayLandingSettings ?? undefined });
       const r = await deployCore(conn, { core: 'xray', config: cfg, execFn: inject?.execFn, writeFileFn: inject?.writeFileFn });
       base.xray = { ok: r.ok, error: r.error, steps: [...(xrAutoInstall ? ['auto-install'] : []), ...certSteps, ...r.steps.map((s) => s.step + (s.ok ? '' : '(fail)'))], journal: r.journal };
-      if (r.ok) clearDirtyCore(db, serverId, 'xray');
+      if (r.ok) {
+        clearDirtyCore(db, serverId, 'xray');
+        try {
+          const v = await (inject?.execFn ?? exec)(conn, 'xray version 2>/dev/null | head -1', { timeoutClass: 'quick' });
+          db.prepare('UPDATE servers SET xray_version = ? WHERE id = ?').run(v.stdout.trim(), serverId);
+        } catch { /* 版本查询失败不阻断 */ }
+      }
     } catch (err) {
       base.xray = { ok: false, error: (err as Error).message, steps: [] };
     }
