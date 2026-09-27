@@ -9,10 +9,10 @@ const db = new DatabaseSync('/opt/singray/data/panel.db');
 const srv = db.prepare("SELECT * FROM servers WHERE name = 'Dedirock'").get();
 const conn = new Client();
 conn.on('ready', () => {
-  conn.exec("xray api statsquery --server=127.0.0.1:18482 -pattern 'inbound>>>' 2>&1 | head -c 400", (e, s) => {
+  conn.exec("xray api statsquery --server=127.0.0.1:18482 -pattern 'inbound>>>' 2>&1 | head -c 500", (e, s) => {
     let o = '';
     s.on('data', (d) => (o += d));
     s.stderr.on('data', (d) => (o += d));
-    s.on('close', () => { console.log('DEDIROCK STATS:', o.slice(0, 380)); conn.end(); process.exit(0); });
+    s.on('close', () => { console.log('DEDIROCK:', o.slice(0, 480)); conn.end(); process.exit(0); });
   });
 }).on('error', (e) => { console.log('ERR:', e.message); process.exit(1); }).connect({ host: srv.host, port: srv.ssh_port, username: srv.ssh_user, password: dec(srv.ssh_auth_secret) });
