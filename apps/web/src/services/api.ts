@@ -381,6 +381,45 @@ export const getDashboard = (): Promise<DashboardData> => request<DashboardData>
 export const getTrafficSummary = (): Promise<{ date: string; nodes: TrafficNodeRow[]; totalUp: number; totalDown: number }> =>
   request('/api/traffic/summary');
 
+export interface TopologyMachine {
+  id: number;
+  name: string;
+  role: 'relay' | 'landing';
+  ipStack: 'v4' | 'v6' | 'dual' | 'unknown';
+  relayMechanism: 'iptables' | 'socat';
+}
+
+export interface TopologyRule {
+  name: string;
+  entryServerId: number;
+  entryName?: string;
+  landingServerId: number;
+  landingName?: string;
+  targetNodeType: 'singbox' | 'xray' | 'port';
+  entryPort: number;
+  targetPort: number;
+  mechanism: string;
+  via?: string;
+  includeInSub: boolean;
+}
+
+export interface TopologyPreview {
+  machines: TopologyMachine[];
+  desired: TopologyRule[];
+  diff: { toCreate: number; toDelete: number; toDeleteList: { id: number; name: string; entryPort: number }[] };
+}
+
+/** 中转拓扑预览(期望规则 + 与现状差异) */
+export const getTopology = (): Promise<TopologyPreview> => request<TopologyPreview>('/api/topology');
+
+/** 手动触发拓扑同步 */
+export const syncTopology = (): Promise<{ created: number; deleted: number; applied: number; errors: string[] }> =>
+  request('/api/topology/sync', { method: 'POST' });
+
+/** 探测全部机器 IP 栈 */
+export const detectIpStacks = (): Promise<{ ok: true; summary: string }> =>
+  request('/api/topology/detect-ip', { method: 'POST' });
+
 export type LifecycleAction = 'install' | 'restart' | 'uninstall';
 
 /** 核心生命周期:install/restart/uninstall(sing-box: /:id/<action>;xray: /:id/xray-<action>,与旧版路径一致) */

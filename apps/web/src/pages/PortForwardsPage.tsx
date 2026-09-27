@@ -17,7 +17,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { DeleteOutlined, PlusOutlined, SyncOutlined } from '@ant-design/icons';
+import { DeleteOutlined, NodeIndexOutlined, PlusOutlined, SyncOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as api from '../services/api';
 import type { ForwardMechanism, NodeItem, PortForwardItem, Server, XrayNodeItem } from '../services/types';
@@ -73,6 +73,9 @@ export function PortForwardsPage() {
   const [step, setStep] = useState(0);
   const [preflight, setPreflight] = useState<api.ForwardPreflight | null>(null);
   const [preflighting, setPreflighting] = useState(false);
+  const [topologyOpen, setTopologyOpen] = useState(false);
+  const [topology, setTopology] = useState<api.TopologyPreview | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [reconcileServerId, setReconcileServerId] = useState<number | undefined>();
   const [reconcileReport, setReconcileReport] = useState<api.ForwardReconcileReport | null>(null);
@@ -143,6 +146,29 @@ export function PortForwardsPage() {
     setStep((s) => s + 1);
   };
 
+  const openTopology = async () => {
+    try {
+      setTopology(await api.getTopology());
+      setTopologyOpen(true);
+    } catch {
+      // api 层已提示
+    }
+  };
+
+  const handleSyncTopology = async () => {
+    setSyncing(true);
+    try {
+      const r = await api.syncTopology();
+      message.success(`拓扑同步完成:新增 ${r.applied}/${r.created} 条,删除 ${r.deleted} 条${r.errors.length ? `,失败 ${r.errors.length} 条` : ''}`);
+      setTopology(await api.getTopology());
+      reload();
+    } catch {
+      // api 层已提示
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleReconcile = async () => {
     if (!reconcileServerId) return;
     setReconciling(true);
@@ -199,8 +225,13 @@ export function PortForwardsPage() {
     {
       title: '名称',
       dataIndex: 'name',
-      width: 170,
-      render: (v: string) => <Typography.Text strong>{v}</Typography.Text>,
+      width: 210,
+      render: (v: string, r) => (
+        <Flex gap={4} align="center">
+          <Typography.Text strong>{v}</Typography.Text>
+          {r.auto === 1 && <Tag color="blue">自动</Tag>}
+        </Flex>
+      ),
     },
     { title: '入口机', dataIndex: 'entry_server_name', width: 100 },
     {
@@ -275,6 +306,9 @@ export function PortForwardsPage() {
           中转规则
         </Typography.Title>
         <Flex gap={8}>
+          <Button icon={<NodeIndexOutlined />} onClick={openTopology}>
+            拓扑
+          </Button>
           <Button icon={<SyncOutlined />} onClick={() => { setReconcileReport(null); setReconcileOpen(true); }}>
             对账
           </Button>
@@ -489,6 +523,67 @@ export function PortForwardsPage() {
             />
           </div>
         </Form>
+      </Modal>
+
+      {/* 拓扑:自动中转的期望规则与差异 */}
+      <Modal title="中转拓扑(自动规则)" open={topologyOpen} onCancel={() => setTopologyOpen(false)} footer={null} width={760}>
+        <Flex vertical gap={12}>
+          <Alert
+            type="info"
+            showIcon
+            message="节点自动中转"
+            description="每个节点占用一个全局唯一端口,所有中转机自动生成到达它的转发规则(IPv6-only 落地机经双栈机两跳)。节点/机器变更后 3 秒自动同步。"
+          />
+          {topology && (
+            <>
+              <Typography.Text strong>机器 IP 栈</Typography.Text>
+              <Flex gap={8} wrap>
+                {topology.machines.map((m) => (
+                  <Tag key={m.id} color={m.ipStack === 'dual' ? 'green' : m.ipStack === 'unknown' ? 'default' : 'blue'}>
+                    {m.name}: {m.ipStack} / {m.relayMechanism}
+                  </Tag>
+                ))}
+              </Flex>
+              {topology.machines.some((m) => m.ipStack === 'unknown') && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message="有机器 IP 栈未知,无法计算其链路"
+                  action={
+                    <Button size="small" onClick={async () => { const r = await api.detectIpStacks(); message.success(r.summary); setTopology(await api.getTopology()); }}>
+                      重新探测
+                    </Button>
+                  }
+                />
+              )}
+              <Typography.Text strong>期望规则({topology.desired.length} 条,含两跳中间规则)</Typography.Text>
+              <Table<api.TopologyRule>
+                rowKey={(r) => `${r.entryServerId}-${r.entryPort}-${r.landingServerId}-${r.targetPort}`}
+                size="small"
+                pagination={false}
+                scroll={{ y: 260 }}
+                dataSource={topology.desired}
+                columns={[
+                  { title: '入口机', dataIndex: 'entryName', width: 110 },
+                  { title: '端口', key: 'p', width: 80, render: (_, r) => <Typography.Text code>{r.entryPort}</Typography.Text> },
+                  { title: '→ 落地机', dataIndex: 'landingName', width: 110 },
+                  { title: '类型', dataIndex: 'targetNodeType', width: 90, render: (v: string) => (v === 'port' ? <Tag>中间跳</Tag> : <Tag color="green">线路</Tag>) },
+                  { title: '进订阅', key: 'sub', width: 70, render: (_, r) => (r.includeInSub ? '✓' : '—') },
+                ]}
+              />
+              <Flex gap={8} align="center">
+                <Button type="primary" icon={<SyncOutlined />} loading={syncing} onClick={handleSyncTopology}>
+                  立即同步
+                </Button>
+                <Typography.Text type={topology.diff.toCreate || topology.diff.toDelete ? 'warning' : 'secondary'}>
+                  {topology.diff.toCreate || topology.diff.toDelete
+                    ? `待同步:新增 ${topology.diff.toCreate} 条,删除 ${topology.diff.toDelete} 条`
+                    : '已与期望一致'}
+                </Typography.Text>
+              </Flex>
+            </>
+          )}
+        </Flex>
       </Modal>
 
       {/* 对账:入口机实际规则 vs 数据库 */}

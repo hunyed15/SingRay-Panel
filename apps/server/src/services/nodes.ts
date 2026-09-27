@@ -4,8 +4,9 @@ import { HttpError } from './errors.js';
 import { encryptJson, decryptJson, type NodeCreds } from './creds.js';
 import { genRandomHex, genPassword } from '../core/crypto.js';
 import { markDirty } from './deployState.js';
+import { requestTopologySync } from '../core/topology/trigger.js';
 import { TEMPLATE_META, PROTOCOL_DEFAULTS, genNodeCreds, nodeDefaults } from './templates.js';
-import { randomFreePort, assertPortFree } from './ports.js';
+import { randomFreePort, assertPortFree, globallyUsedPorts } from './ports.js';
 import { buildShareLink, type NodeView } from '../core/subscribe/index.js';
 
 export interface NodeRow {
@@ -173,7 +174,7 @@ export function createNode(db: DatabaseSync, b: NodeInput) {
   used.push(...xrayUsed);
   const ls = db.prepare('SELECT in_port FROM landing_settings WHERE server_id = ?').get(b.serverId) as { in_port: number } | undefined;
   if (ls) used.push(ls.in_port);
-  const port = b.port ? Number(b.port) : randomFreePort(used);
+  const port = b.port ? Number(b.port) : randomFreePort(globallyUsedPorts(db));
   if (b.port) assertPortFree(db, b.serverId, port, { selfTable: 'nodes' });
 
   const creds = genNodeCreds(meta.protocol);
@@ -213,6 +214,7 @@ export function createNode(db: DatabaseSync, b: NodeInput) {
       '',
       new Date().toISOString(),
     );
+  requestTopologySync(db);
   markDirty(db, b.serverId, 'singbox');
   return getNode(db, Number(info.lastInsertRowid));
 }
@@ -290,6 +292,7 @@ export function updateNode(db: DatabaseSync, id: number, b: NodeUpdateInput) {
     b.note ?? row.note,
     id,
   );
+  requestTopologySync(db);
   markDirty(db, row.server_id, 'singbox');
   return getNode(db, id);
 }
@@ -298,6 +301,7 @@ export function updateNode(db: DatabaseSync, id: number, b: NodeUpdateInput) {
 export function toggleNode(db: DatabaseSync, id: number) {
   const row = loadRow(db, id);
   db.prepare('UPDATE nodes SET enabled = ? WHERE id = ?').run(row.enabled ? 0 : 1, id);
+  requestTopologySync(db);
   markDirty(db, row.server_id, 'singbox');
   return getNode(db, id);
 }
@@ -305,5 +309,6 @@ export function toggleNode(db: DatabaseSync, id: number) {
 export function deleteNode(db: DatabaseSync, id: number): void {
   const row = loadRow(db, id);
   db.prepare('DELETE FROM nodes WHERE id = ?').run(id);
+  requestTopologySync(db);
   markDirty(db, row.server_id, 'singbox');
 }

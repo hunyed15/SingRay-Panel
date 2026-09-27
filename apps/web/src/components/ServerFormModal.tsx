@@ -23,6 +23,7 @@ interface FormValues {
   sshAuthSecret: string;
   sshSudo: boolean;
   jumpServerId?: number | null;
+  relayMechanism?: 'iptables' | 'socat';
 }
 
 const ROLE_OPTIONS = [
@@ -69,6 +70,7 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
         sshAuthSecret: '',
         sshSudo: record.ssh_sudo === 1,
         jumpServerId: record.jump_server_id ?? null,
+        relayMechanism: record.relay_mechanism ?? 'socat',
       });
     } else {
       form.setFieldsValue({
@@ -111,6 +113,7 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
         base.sshSudo = values.sshSudo;
         // 跳板机:显式传值(null = 直连),否则后端保持原值
         base.jumpServerId = values.jumpServerId ?? null;
+        (base as any).relayMechanism = values.relayMechanism ?? 'socat';
         const secret = values.sshAuthSecret.trim();
         // 编辑时凭据留空 = 保持原凭据不修改
         if (!isEdit || secret) base.sshAuthSecret = secret;
@@ -164,6 +167,18 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
             <Input placeholder="HK / KR / JP / US" />
           </Form.Item>
         </Flex>
+        <Form.Item
+          name="relayMechanism"
+          label="作为中转入口时的转发机制"
+          tooltip="socat 用户态转发(容器机通用,实测更可靠);iptables 内核态(需独立内核机器,容器内会静默失效)"
+        >
+          <Select
+            options={[
+              { value: 'socat', label: 'socat(推荐,容器环境通用)' },
+              { value: 'iptables', label: 'iptables DNAT(仅独立内核机器)' },
+            ]}
+          />
+        </Form.Item>
         <Form.Item name="control" label="控制方式" rules={[{ required: true }]}>
           <Select options={CONTROL_OPTIONS} />
         </Form.Item>

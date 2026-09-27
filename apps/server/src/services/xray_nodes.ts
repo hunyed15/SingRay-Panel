@@ -4,8 +4,9 @@ import { HttpError } from './errors.js';
 import { encryptJson, decryptJson } from './creds.js';
 import { genRandomHex, genPassword } from '../core/crypto.js';
 import { XRAY_TEMPLATE_META, XRAY_PROTOCOL_DEFAULTS, genXrayNodeCreds, xrayNodeDefaults } from './xray_templates.js';
-import { randomFreePort, assertPortFree } from './ports.js';
+import { randomFreePort, assertPortFree, globallyUsedPorts } from './ports.js';
 import { markDirty } from './deployState.js';
+import { requestTopologySync } from '../core/topology/trigger.js';
 import { buildShareLink, type NodeView } from '../core/subscribe/index.js';
 import type { NodeRow } from './nodes.js';
 
@@ -131,7 +132,7 @@ export function createXrayNode(db: DatabaseSync, b: XrayNodeInput) {
   // 端口分配:排除本表与 sing-box 节点端口避免冲突
   const used = (db.prepare('SELECT listen_port FROM xray_nodes WHERE server_id = ?').all(b.serverId) as unknown as { listen_port: number }[]).map((r) => r.listen_port);
   const sbUsed = (db.prepare('SELECT listen_port FROM nodes WHERE server_id = ?').all(b.serverId) as unknown as { listen_port: number }[]).map((r) => r.listen_port);
-  const port = b.port ? Number(b.port) : randomFreePort([...used, ...sbUsed]);
+  const port = b.port ? Number(b.port) : randomFreePort(globallyUsedPorts(db));
   if (b.port) assertPortFree(db, b.serverId, port, { selfTable: 'xray_nodes' });
 
   // xhttp 与 vision flow 不兼容
@@ -160,6 +161,7 @@ export function createXrayNode(db: DatabaseSync, b: XrayNodeInput) {
       '',
       new Date().toISOString(),
     );
+  requestTopologySync(db);
   markDirty(db, b.serverId, 'xray');
   return getXrayNode(db, Number(info.lastInsertRowid));
 }
@@ -227,6 +229,7 @@ export function updateXrayNode(db: DatabaseSync, id: number, b: XrayNodeUpdateIn
   if (b.port !== undefined) assertPortFree(db, row.server_id, port, { selfTable: 'xray_nodes', excludeNodeId: id });
 
   const nextWsPath = b.wsPath !== undefined ? b.wsPath : row.ws_path;
+  requestTopologySync(db);
   markDirty(db, row.server_id, 'xray');
   db.prepare(
     `UPDATE xray_nodes SET name=?, protocol=?, listen_port=?, enabled=?, creds_enc=?, tls_mode=?, sni=?, transport=?, ws_path=?, flow=?, outbound_type=?, landing_server_id=?, note=?
@@ -253,6 +256,7 @@ export function updateXrayNode(db: DatabaseSync, id: number, b: XrayNodeUpdateIn
 export function toggleXrayNode(db: DatabaseSync, id: number) {
   const row = loadRow(db, id);
   db.prepare('UPDATE xray_nodes SET enabled = ? WHERE id = ?').run(row.enabled ? 0 : 1, id);
+  requestTopologySync(db);
   markDirty(db, row.server_id, 'xray');
   return getXrayNode(db, id);
 }
@@ -260,6 +264,7 @@ export function toggleXrayNode(db: DatabaseSync, id: number) {
 export function deleteXrayNode(db: DatabaseSync, id: number): void {
   const row = loadRow(db, id);
   db.prepare('DELETE FROM xray_nodes WHERE id = ?').run(id);
+  requestTopologySync(db);
   markDirty(db, row.server_id, 'xray');
 }
 

@@ -22,6 +22,7 @@ import testRoutes from './routes/test.js';
 import subRoutes, { singboxSubRoutes, xraySubRoutes } from './routes/sub.js';
 import systemRoutes from './routes/system.js';
 import trafficRoutes from './routes/traffic.js';
+import topologyRoutes from './routes/topology.js';
 import { registerJob, startScheduler } from './core/scheduler.js';
 import { runBackupNow, backedUpToday } from './core/backup.js';
 import { runHealthCheckCycle } from './core/healthcheck.js';
@@ -83,6 +84,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(testRoutes, { prefix: '/api/test' });
   await app.register(systemRoutes, { prefix: '/api/system' });
   await app.register(trafficRoutes, { prefix: '/api/traffic' });
+  await app.register(topologyRoutes, { prefix: '/api/topology' });
   // 公开订阅端点(非 /api 前缀,不经过 Bearer 校验)
   await app.register(singboxSubRoutes, { prefix: '/sub/singbox' });
   await app.register(xraySubRoutes, { prefix: '/sub/xray' });

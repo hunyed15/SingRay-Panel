@@ -5,6 +5,7 @@ import { encryptSecret, decryptSecret } from './creds.js';
 import { genRealityKeypair, genSsPassword, genShortId } from '../core/crypto.js';
 import { testConnection, type ExecFn } from '../core/ssh/executor.js';
 import { serverConn } from './conn.js';
+import { requestTopologySync } from '../core/topology/trigger.js';
 
 export interface ServerRow {
   id: number;
@@ -26,6 +27,8 @@ export interface ServerRow {
   xray_last_seen: string | null;
   last_seen: string | null;
   jump_server_id: number | null;
+  ip_stack: string;
+  relay_mechanism: string;
 }
 
 export interface ServerInput {
@@ -42,6 +45,8 @@ export interface ServerInput {
   region?: string;
   /** SSH 跳板机(null = 直连) */
   jumpServerId?: number | null;
+  /** 作为中转入口时的转发机制偏好 */
+  relayMechanism?: 'iptables' | 'socat';
 }
 
 const SELECT_ALL = 'SELECT * FROM servers';
@@ -92,8 +97,8 @@ export function createServer(db: DatabaseSync, b: ServerInput): Omit<ServerRow, 
   const sshSecret = control === 'ssh' ? encryptSecret(b.sshAuthSecret ?? '') : '';
   const info = db
     .prepare(
-      `INSERT INTO servers (name, role, control, host, client_host, ssh_port, ssh_user, ssh_auth_type, ssh_auth_secret, ssh_sudo, region, jump_server_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO servers (name, role, control, host, client_host, ssh_port, ssh_user, ssh_auth_type, ssh_auth_secret, ssh_sudo, region, jump_server_id, relay_mechanism)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .run(
       b.name,
@@ -108,6 +113,7 @@ export function createServer(db: DatabaseSync, b: ServerInput): Omit<ServerRow, 
       b.sshSudo ? 1 : 0,
       b.region ?? '',
       b.jumpServerId ?? null,
+      b.relayMechanism ?? 'socat',
     );
   const id = Number(info.lastInsertRowid);
   createRoleSettings(db, id, b.role);
@@ -125,7 +131,7 @@ export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput)
     db.prepare('UPDATE servers SET ssh_auth_secret = ? WHERE id = ?').run(encryptSecret(b.sshAuthSecret), id);
   }
   db.prepare(
-    `UPDATE servers SET name=?, role=?, control=?, host=?, client_host=?, ssh_port=?, ssh_user=?, ssh_auth_type=?, ssh_sudo=?, region=?, jump_server_id=?
+    `UPDATE servers SET name=?, role=?, control=?, host=?, client_host=?, ssh_port=?, ssh_user=?, ssh_auth_type=?, ssh_sudo=?, region=?, jump_server_id=?, relay_mechanism=?
      WHERE id=?`,
   ).run(
     b.name ?? row.name,
@@ -140,6 +146,7 @@ export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput)
     b.region ?? row.region,
     // jumpServerId:显式传 null 清空,传数字设置,不传保持原值
     b.jumpServerId !== undefined ? b.jumpServerId : row.jump_server_id,
+    b.relayMechanism ?? row.relay_mechanism,
     id,
   );
 
@@ -149,6 +156,7 @@ export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput)
     db.prepare('DELETE FROM landing_settings WHERE server_id = ?').run(id);
     createRoleSettings(db, id, nextRole);
   }
+  requestTopologySync(db);
   return getServer(db, id);
 }
 
@@ -163,6 +171,7 @@ export function deleteServer(db: DatabaseSync, id: number): void {
     .get(id, id) as unknown as { c: number };
   if (used.c + usedXray.c > 0) throw new HttpError(409, '该服务器正被节点引用,请先删除相关节点');
   db.prepare('DELETE FROM servers WHERE id = ?').run(id);
+  requestTopologySync(db);
 }
 
 /** SSH 连通性测试;execFn 可注入以便单测 */

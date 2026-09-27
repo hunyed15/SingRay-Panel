@@ -73,6 +73,8 @@ export interface Server {
   last_seen: string | null;
   /** SSH 跳板机(经它隧道连接,解决本地无 IPv6/直连不稳) */
   jump_server_id: number | null;
+  ip_stack: 'v4' | 'v6' | 'dual' | 'unknown';
+  relay_mechanism: 'iptables' | 'socat';
 }
 
 export interface ServerInput {
@@ -92,6 +94,7 @@ export interface ServerInput {
   sshSudo?: boolean;
   /** SSH 跳板机(经它隧道连接) */
   jumpServerId?: number | null;
+  relayMechanism?: 'iptables' | 'socat';
 }
 
 export interface TestResult {
@@ -263,6 +266,8 @@ export interface PortForwardItem {
   include_in_sub: number;
   note: string;
   created_at: string;
+  /** 1 = 拓扑自动生成 */
+  auto: number;
 }
 
 export interface PortForwardCreateInput {

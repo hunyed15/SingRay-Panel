@@ -43,3 +43,19 @@ export function assertPortFree(
     if (row) throw new HttpError(409, `端口 ${port} 已被该机器上其他节点占用`);
   }
 }
+
+/**
+ * 全局已用端口:所有机器的节点端口 + 所有转发规则的入口/目标端口。
+ * 拓扑引擎要求节点端口跨机唯一(整条中转链路复用同一端口号),故分配时必须全局去重。
+ */
+export function globallyUsedPorts(db: DatabaseSync): number[] {
+  const rows = db
+    .prepare(
+      `SELECT listen_port AS p FROM nodes
+       UNION SELECT listen_port AS p FROM xray_nodes
+       UNION SELECT entry_port AS p FROM port_forwards
+       UNION SELECT target_port AS p FROM port_forwards`,
+    )
+    .all() as { p: number }[];
+  return rows.map((r) => r.p);
+}
