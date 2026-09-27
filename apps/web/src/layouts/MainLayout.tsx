@@ -36,7 +36,11 @@ export function MainLayout() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [username, setUsername] = useState('');
 
-  const selectedKey = NAV_KEYS.find((key) => pathname.startsWith(key)) ?? '/servers';
+  // 首页 key 是 '/',前缀匹配会命中所有路径 —— 用最长匹配(精确优先)
+  const selectedKey =
+    NAV_KEYS.filter((key) => (key === '/' ? pathname === '/' : pathname.startsWith(key))).sort(
+      (a, b) => b.length - a.length,
+    )[0] ?? '/servers';
 
   useEffect(() => {
     let cancelled = false;
