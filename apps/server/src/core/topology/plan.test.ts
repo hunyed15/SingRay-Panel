@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { canReach, resolvePath, planTopology, hostFamily, type MachineRef, type NodeRef } from './plan.js';
+import { DatabaseSync } from 'node:sqlite';
+import { migrate } from '../../db/client.js';
+import { canReach, resolvePath, planTopology, hostFamily, loadRelayableNodes, type MachineRef, type NodeRef } from './plan.js';
 
 // 与生产一致的拓扑
 const M = (over: Partial<MachineRef> & { id: number; name: string }): MachineRef => ({
@@ -107,5 +109,26 @@ describe('topology: rule planning', () => {
   it('unknown ip_stack machines produce no rules (not guessed)', () => {
     const unknown = machines.map((m) => ({ ...m, ipStack: 'unknown' as const }));
     expect(planTopology(unknown, nodes)).toEqual([]);
+  });
+});
+
+describe('topology: loadRelayableNodes filter', () => {
+  it('excludes tunnel/socks/http, keeps real client protocols', () => {
+    const db = new DatabaseSync(':memory:');
+    migrate(db);
+    db.prepare("INSERT INTO servers (name, host, role) VALUES ('Landing','1.2.3.4','landing')").run();
+    let port = 10000;
+    const sb: [string, boolean][] = [['vless', true], ['vmess', true], ['trojan', true], ['hysteria2', true], ['tunnel', false], ['socks', false], ['http', false]];
+    for (const [proto, _keep] of sb) {
+      db.prepare('INSERT INTO nodes (name, server_id, protocol, listen_port, enabled) VALUES (?, 1, ?, ?, 1)')
+        .run(`${proto}-node`, proto, port++);
+    }
+    for (const proto of ['vless', 'vmess', 'socks', 'http']) {
+      db.prepare('INSERT INTO xray_nodes (name, server_id, protocol, listen_port, enabled) VALUES (?, 1, ?, ?, 1)')
+        .run(`x-${proto}`, proto, port++);
+    }
+    const got = loadRelayableNodes(db).map((n) => n.name).sort();
+    expect(got).toEqual(['hysteria2-node', 'trojan-node', 'vless-node', 'vmess-node', 'x-vless', 'x-vmess']);
+    db.close();
   });
 });

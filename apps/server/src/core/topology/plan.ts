@@ -174,16 +174,22 @@ export function loadMachines(db: DatabaseSync): MachineRef[] {
   }));
 }
 
-/** 参与中转的节点:启用中的节点,排除 tunnel(sing-box 的转发构造,非真实服务) */
+/**
+ * 参与中转的节点。
+ * 排除:
+ *  - tunnel(sing-box 的转发构造,非真实服务)
+ *  - socks/http(不进订阅,客户端不可用 → 中转无意义,纯浪费机器资源)
+ */
 export function loadRelayableNodes(db: DatabaseSync): NodeRef[] {
-  const sb = (db.prepare("SELECT id, name, server_id, listen_port FROM nodes WHERE enabled = 1 AND protocol != 'tunnel'").all() as Row[]).map((r) => ({
+  const EXCLUDED = `('tunnel', 'socks', 'http')`;
+  const sb = (db.prepare(`SELECT id, name, server_id, listen_port FROM nodes WHERE enabled = 1 AND protocol NOT IN ${EXCLUDED}`).all() as Row[]).map((r) => ({
     id: r.id,
     name: r.name,
     type: 'singbox' as const,
     serverId: r.server_id,
     port: r.listen_port,
   }));
-  const xr = (db.prepare('SELECT id, name, server_id, listen_port FROM xray_nodes WHERE enabled = 1').all() as Row[]).map((r) => ({
+  const xr = (db.prepare(`SELECT id, name, server_id, listen_port FROM xray_nodes WHERE enabled = 1 AND protocol NOT IN ${EXCLUDED}`).all() as Row[]).map((r) => ({
     id: r.id,
     name: r.name,
     type: 'xray' as const,
