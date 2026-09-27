@@ -3,6 +3,7 @@ import { Button, Flex, Layout, Menu, Typography, theme } from 'antd';
 import {
   ApiOutlined,
   ClusterOutlined,
+  DashboardOutlined,
   LogoutOutlined,
   SettingOutlined,
   ShareAltOutlined,
@@ -17,6 +18,7 @@ import { AccountModal } from '../components/AccountModal';
 const { Sider, Header, Content } = Layout;
 
 const NAV_ITEMS = [
+  { key: '/', icon: <DashboardOutlined />, label: '首页' },
   { key: '/servers', icon: <ClusterOutlined />, label: '服务器' },
   { key: '/nodes', icon: <ApiOutlined />, label: 'Singbox 节点' },
   { key: '/xray-nodes', icon: <ShareAltOutlined />, label: 'Xray 节点' },

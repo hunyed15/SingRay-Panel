@@ -25,3 +25,16 @@ export function formatRelativeTime(value: string | null | undefined): string {
   if (abs >= 60_000) return rtf.format(Math.round(diffMs / 60_000), 'minute');
   return rtf.format(Math.round(diffMs / 1000), 'second');
 }
+
+/** 字节 → 可读格式(B/KB/MB/GB/TB) */
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || Number.isNaN(bytes)) return '-';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+}

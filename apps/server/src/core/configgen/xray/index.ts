@@ -189,8 +189,20 @@ export function buildXrayConfig(input: XrayMachineInput): Record<string, unknown
     inbounds.push(buildXrayLandingInbound(xrayLandingSettings));
   }
 
+  // v2ray 统计 API(仅本机回环):stats + api 入站 + 路由规则
+  inbounds.push({
+    tag: 'api-in',
+    listen: '127.0.0.1',
+    port: 18482,
+    protocol: 'dokodemo-door',
+    settings: { address: '127.0.0.1' },
+  });
+  rules.push({ type: 'field', inboundTag: ['api-in'], outboundTag: 'api' });
+
   return {
     log: { loglevel: 'warning' },
+    stats: {},
+    api: { tag: 'api', services: ['StatsService'] },
     inbounds,
     outbounds,
     routing: { domainStrategy: 'AsIs', rules },

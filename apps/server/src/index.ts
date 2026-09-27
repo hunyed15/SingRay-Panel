@@ -21,9 +21,11 @@ import portForwardRoutes from './routes/port_forwards.js';
 import testRoutes from './routes/test.js';
 import subRoutes, { singboxSubRoutes, xraySubRoutes } from './routes/sub.js';
 import systemRoutes from './routes/system.js';
+import trafficRoutes from './routes/traffic.js';
 import { registerJob, startScheduler } from './core/scheduler.js';
 import { runBackupNow, backedUpToday } from './core/backup.js';
 import { runHealthCheckCycle } from './core/healthcheck.js';
+import { collectAllTraffic } from './core/traffic.js';
 import { recordRun } from './core/alerts.js';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -80,6 +82,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(portForwardRoutes, { prefix: '/api/port-forwards' });
   await app.register(testRoutes, { prefix: '/api/test' });
   await app.register(systemRoutes, { prefix: '/api/system' });
+  await app.register(trafficRoutes, { prefix: '/api/traffic' });
   // 公开订阅端点(非 /api 前缀,不经过 Bearer 校验)
   await app.register(singboxSubRoutes, { prefix: '/sub/singbox' });
   await app.register(xraySubRoutes, { prefix: '/sub/xray' });
@@ -105,6 +108,11 @@ if (isMain) {
       registerJob('healthcheck', config.healthIntervalMin * 60_000, async () => {
         const summary = await runHealthCheckCycle(db);
         recordRun(db, 'healthcheck', true, summary);
+        return summary;
+      });
+      registerJob('traffic', 5 * 60_000, async () => {
+        const summary = await collectAllTraffic(db);
+        recordRun(db, 'traffic', true, summary);
         return summary;
       });
       startScheduler();

@@ -344,6 +344,31 @@ export const runBackupNow = (): Promise<{ ok: true; file: string; size: number }
 export const runHealthCheckNow = (): Promise<{ ok: true; summary: string }> =>
   request<{ ok: true; summary: string }>('/api/system/healthcheck', { method: 'POST' });
 
+export interface TrafficNodeRow {
+  serverName: string;
+  core: 'singbox' | 'xray';
+  tag: string;
+  nodeName: string;
+  up: number;
+  down: number;
+}
+
+export interface DashboardData {
+  machines: { total: number; online: number; list: { id: number; name: string; role: string; ping: string; xray: string }[] };
+  pendingDeploys: { serverId: number; name: string; singbox: boolean; xray: boolean }[];
+  traffic: { date: string; totalUp: number; totalDown: number; top: TrafficNodeRow[] };
+  alerts: { detail: string; at: string }[];
+  scheduler: { name: string; lastOk: boolean | null; lastAt: number | null; lastDetail: string }[];
+  tgConfigured: boolean;
+}
+
+/** Dashboard 聚合数据 */
+export const getDashboard = (): Promise<DashboardData> => request<DashboardData>('/api/traffic/dashboard');
+
+/** 今日流量明细(按节点) */
+export const getTrafficSummary = (): Promise<{ date: string; nodes: TrafficNodeRow[]; totalUp: number; totalDown: number }> =>
+  request('/api/traffic/summary');
+
 export type LifecycleAction = 'install' | 'restart' | 'uninstall';
 
 /** 核心生命周期:install/restart/uninstall(sing-box: /:id/<action>;xray: /:id/xray-<action>,与旧版路径一致) */

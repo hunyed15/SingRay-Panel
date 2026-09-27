@@ -220,6 +220,12 @@ exports[`singbox configgen golden snapshots (11 templates) > inbound: vmess-ws-t
 
 exports[`singbox configgen golden snapshots (11 templates) > machine config with relay node + landing shared inbound 1`] = `
 {
+  "experimental": {
+    "v2ray_api": {
+      "listen": "127.0.0.1:18481",
+      "stats": {},
+    },
+  },
   "inbounds": [
     {
       "listen": "::",
@@ -445,6 +451,12 @@ exports[`xray configgen golden snapshots (6 templates) > inbound: vmess-ws-tls 1
 
 exports[`xray configgen golden snapshots (6 templates) > machine config: vless relay chain + landing shared ss inbound 1`] = `
 {
+  "api": {
+    "services": [
+      "StatsService",
+    ],
+    "tag": "api",
+  },
   "inbounds": [
     {
       "listen": "0.0.0.0",
@@ -493,6 +505,15 @@ exports[`xray configgen golden snapshots (6 templates) > machine config: vless r
       },
       "tag": "landing-in-20409",
     },
+    {
+      "listen": "127.0.0.1",
+      "port": 18482,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1",
+      },
+      "tag": "api-in",
+    },
   ],
   "log": {
     "loglevel": "warning",
@@ -527,7 +548,15 @@ exports[`xray configgen golden snapshots (6 templates) > machine config: vless r
         "outboundTag": "landing-71",
         "type": "field",
       },
+      {
+        "inboundTag": [
+          "api-in",
+        ],
+        "outboundTag": "api",
+        "type": "field",
+      },
     ],
   },
+  "stats": {},
 }
 `;
