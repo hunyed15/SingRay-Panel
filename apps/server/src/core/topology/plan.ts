@@ -21,6 +21,11 @@ export interface MachineRef {
   role: 'relay' | 'landing';
   ipStack: IpStack;
   relayMechanism: 'iptables' | 'socat';
+  /**
+   * 两跳时指定中间跳优先走哪台双栈机(落地机上的设置);null/undefined = 引擎自选。
+   * 仅在该机确实是合法候选(双栈且双向可达)时生效,否则回退到默认选取。
+   */
+  preferViaServerId?: number | null;
 }
 
 export interface NodeRef {
@@ -44,6 +49,8 @@ export interface DesiredRule {
   entryPort: number;
   targetPort: number;
   mechanism: 'iptables' | 'socat';
+  /** 规则归属核心(singbox/xray);中间跳归并到所属链路的核心,便于按核心整体筛选 */
+  core: 'singbox' | 'xray';
   /** 链路上游(用于展示:CDT → Hytron → JP) */
   via?: string;
   /** 末跳规则进订阅(只有末跳才代表一个可用线路) */
@@ -66,7 +73,8 @@ export function canReach(fromStack: IpStack, host: string): boolean {
 
 /**
  * 计算 R → L 的链路。返回机器 id 序列(含首尾);无解返回 null。
- * 优先一跳;否则找双栈中间机(可多个,取第一个 dual 且双向可达的)。
+ * 优先一跳;否则找双栈中间机。
+ * 中间机选取:若落地机指定了 preferViaServerId 且它合法可用,则用它;否则取第一个合法候选。
  */
 export function resolvePath(
   relay: MachineRef,
@@ -81,7 +89,9 @@ export function resolvePath(
     (m) => m.id !== relay.id && m.id !== landing.id && m.ipStack === 'dual' && canReach(relay.ipStack, m.host) && canReach(m.ipStack, landing.host),
   );
   if (candidates.length === 0) return null;
-  return [relay.id, candidates[0].id, landing.id];
+  // 落地机指定的优先中间跳(仅在它本身是合法候选时采用)
+  const preferred = landing.preferViaServerId != null ? candidates.find((m) => m.id === landing.preferViaServerId) : undefined;
+  return [relay.id, (preferred ?? candidates[0]).id, landing.id];
 }
 
 /**
@@ -98,6 +108,9 @@ export function planTopology(
   const rules = new Map<string, DesiredRule>();
 
   const add = (r: DesiredRule) => {
+    // key 与 diffRules / DB 的 UNIQUE(entry_server_id, entry_port) 保持同一口径。
+    // 端口全局唯一(services/ports.ts globallyUsedPorts),因此同一 (入口,端口,落地,目标端口)
+    // 不可能对应两条不同类型的规则;若改用更细的 key,反而会生成 diffRules 无法区分的重复行。
     const key = `${r.entryServerId}|${r.entryPort}|${r.landingServerId}|${r.targetPort}`;
     if (!rules.has(key)) rules.set(key, r);
   };
@@ -122,6 +135,7 @@ export function planTopology(
           entryPort: node.port,
           targetPort: node.port,
           mechanism: mech,
+          core: node.type,
           includeInSub: true,
         });
       } else {
@@ -138,6 +152,7 @@ export function planTopology(
           entryPort: node.port,
           targetPort: node.port,
           mechanism: mech,
+          core: node.type,
           via: viaNames,
           includeInSub: false,
         });
@@ -151,6 +166,7 @@ export function planTopology(
           entryPort: node.port,
           targetPort: node.port,
           mechanism: mid.relayMechanism,
+          core: node.type,
           via: viaNames,
           includeInSub: true,
         });
@@ -163,7 +179,7 @@ export function planTopology(
 // ---------- DB 装配 ----------
 
 export function loadMachines(db: DatabaseSync): MachineRef[] {
-  return (db.prepare('SELECT id, name, host, client_host, role, ip_stack, relay_mechanism FROM servers').all() as Row[]).map((r) => ({
+  return (db.prepare('SELECT id, name, host, client_host, role, ip_stack, relay_mechanism, prefer_via_server_id FROM servers').all() as Row[]).map((r) => ({
     id: r.id,
     name: r.name,
     host: r.host,
@@ -171,6 +187,7 @@ export function loadMachines(db: DatabaseSync): MachineRef[] {
     role: r.role,
     ipStack: (r.ip_stack ?? 'unknown') as IpStack,
     relayMechanism: (r.relay_mechanism ?? 'socat') as 'iptables' | 'socat',
+    preferViaServerId: r.prefer_via_server_id ?? null,
   }));
 }
 
@@ -201,13 +218,13 @@ export function loadRelayableNodes(db: DatabaseSync): NodeRef[] {
 
 export interface RuleDiff {
   toCreate: DesiredRule[];
-  toDelete: { id: number; name: string; entryServerId: number; entryPort: number; landingServerId: number; targetPort: number }[];
+  toDelete: { id: number; name: string; entryServerId: number; entryPort: number; landingServerId: number; targetPort: number; mechanism: 'iptables' | 'socat' }[];
 }
 
 /** 对比期望规则与现有 auto 规则,得出增删集合 */
 export function diffRules(db: DatabaseSync, desired: DesiredRule[]): RuleDiff {
   const existing = db
-    .prepare('SELECT id, name, entry_server_id, entry_port, landing_server_id, target_port FROM port_forwards WHERE auto = 1')
+    .prepare('SELECT id, name, entry_server_id, entry_port, landing_server_id, target_port, mechanism FROM port_forwards WHERE auto = 1')
     .all() as Row[];
   const key = (e: number, ep: number, l: number, tp: number) => `${e}|${ep}|${l}|${tp}`;
   const desiredKeys = new Set(desired.map((d) => key(d.entryServerId, d.entryPort, d.landingServerId, d.targetPort)));
@@ -224,6 +241,8 @@ export function diffRules(db: DatabaseSync, desired: DesiredRule[]): RuleDiff {
         entryPort: r.entry_port,
         landingServerId: r.landing_server_id,
         targetPort: r.target_port,
+        // 用规则自身记录的机制删除,而非机器当前配置(机器机制变更后仍能正确清理)
+        mechanism: (r.mechanism ?? 'socat') as 'iptables' | 'socat',
       })),
   };
 }

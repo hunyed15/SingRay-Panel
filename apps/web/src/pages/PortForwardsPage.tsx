@@ -10,6 +10,7 @@ import {
   Modal,
   Popconfirm,
   Radio,
+  Segmented,
   Select,
   Steps,
   Switch,
@@ -80,12 +81,17 @@ export function PortForwardsPage() {
   const [reconcileServerId, setReconcileServerId] = useState<number | undefined>();
   const [reconcileReport, setReconcileReport] = useState<api.ForwardReconcileReport | null>(null);
   const [reconciling, setReconciling] = useState(false);
+  /** 按核心筛选:all / singbox / xray */
+  const [coreFilter, setCoreFilter] = useState<'all' | 'singbox' | 'xray'>('all');
   const [form] = Form.useForm<WizardValues>();
 
   const forwards = data?.forwards ?? [];
   const servers: Server[] = data?.servers ?? [];
   const nodes: NodeItem[] = data?.nodes ?? [];
   const xrayNodes: XrayNodeItem[] = data?.xrayNodes ?? [];
+
+  /** 核心筛选后的规则(中间跳按所属链路的核心归并,不会孤立) */
+  const visibleForwards = coreFilter === 'all' ? forwards : forwards.filter((f) => f.core === coreFilter);
 
   const relayServers = servers.filter((s) => s.role === 'relay');
   const landingServers = servers.filter((s) => s.role === 'landing');
@@ -235,6 +241,17 @@ export function PortForwardsPage() {
     },
     { title: '入口机', dataIndex: 'entry_server_name', width: 100 },
     {
+      title: '核心',
+      dataIndex: 'core',
+      width: 80,
+      render: (c: PortForwardItem['core']) =>
+        c ? (
+          <Tag color={c === 'singbox' ? 'geekblue' : 'purple'}>{c === 'singbox' ? 'SingBox' : 'Xray'}</Tag>
+        ) : (
+          <Typography.Text type="secondary">-</Typography.Text>
+        ),
+    },
+    {
       title: '入口端口',
       dataIndex: 'entry_port',
       width: 90,
@@ -305,7 +322,16 @@ export function PortForwardsPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           中转规则
         </Typography.Title>
-        <Flex gap={8}>
+        <Flex gap={8} align="center">
+          <Segmented
+            value={coreFilter}
+            onChange={(v) => setCoreFilter(v as 'all' | 'singbox' | 'xray')}
+            options={[
+              { value: 'all', label: `全部(${forwards.length})` },
+              { value: 'singbox', label: `SingBox(${forwards.filter((f) => f.core === 'singbox').length})` },
+              { value: 'xray', label: `Xray(${forwards.filter((f) => f.core === 'xray').length})` },
+            ]}
+          />
           <Button icon={<NodeIndexOutlined />} onClick={openTopology}>
             拓扑
           </Button>
@@ -335,7 +361,7 @@ export function PortForwardsPage() {
       <Table<PortForwardItem>
         rowKey="id"
         columns={columns}
-        dataSource={forwards}
+        dataSource={visibleForwards}
         loading={loading}
         pagination={false}
         locale={{
@@ -480,7 +506,6 @@ export function PortForwardsPage() {
                 options={[
                   { value: 'socat', label: 'socat 用户态转发(推荐,容器环境通用)' },
                   { value: 'iptables', label: 'iptables DNAT(仅独立内核机器)' },
-                  { value: 'socat', label: 'socat 用户态转发' },
                 ]}
               />
             </Form.Item>
@@ -567,6 +592,14 @@ export function PortForwardsPage() {
                   { title: '入口机', dataIndex: 'entryName', width: 110 },
                   { title: '端口', key: 'p', width: 80, render: (_, r) => <Typography.Text code>{r.entryPort}</Typography.Text> },
                   { title: '→ 落地机', dataIndex: 'landingName', width: 110 },
+                  {
+                    title: '核心',
+                    dataIndex: 'core',
+                    width: 80,
+                    render: (c: string) => (
+                      <Tag color={c === 'singbox' ? 'geekblue' : 'purple'}>{c === 'singbox' ? 'SingBox' : 'Xray'}</Tag>
+                    ),
+                  },
                   { title: '类型', dataIndex: 'targetNodeType', width: 90, render: (v: string) => (v === 'port' ? <Tag>中间跳</Tag> : <Tag color="green">线路</Tag>) },
                   { title: '进订阅', key: 'sub', width: 70, render: (_, r) => (r.includeInSub ? '✓' : '—') },
                 ]}

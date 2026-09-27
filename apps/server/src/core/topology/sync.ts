@@ -15,32 +15,19 @@ export interface SyncResult {
   errors: string[];
 }
 
-/** 单条期望规则落地到机器(创建) */
-async function applyDesired(db: DatabaseSync, d: DesiredRule): Promise<void> {
-  const entry = db.prepare('SELECT * FROM servers WHERE id = ?').get(d.entryServerId) as Row;
-  const landing = db.prepare('SELECT * FROM servers WHERE id = ?').get(d.landingServerId) as Row;
-  const conn = serverConn(db, d.entryServerId);
-  const landingHost = landing.client_host || landing.host;
-  await applyForward(
-    conn,
-    { id: 0 /* 应用前先用临时 id,落库后再以真实 id 重建标签 */, entryPort: d.entryPort, landingHost, targetPort: d.targetPort, mechanism: d.mechanism },
-    false,
-  );
-  void entry;
-}
-
-/** 删除机器侧规则 */
+/** 删除机器侧规则(用规则自身记录的 mechanism 与真实 id,而非机器当前配置) */
 async function removeRule(
   db: DatabaseSync,
-  r: { entryServerId: number; entryPort: number; landingServerId: number; targetPort: number },
+  r: { id: number; entryServerId: number; entryPort: number; landingServerId: number; targetPort: number; mechanism: 'iptables' | 'socat' },
 ): Promise<void> {
   const landing = db.prepare('SELECT host, client_host FROM servers WHERE id = ?').get(r.landingServerId) as Row | undefined;
   if (!landing) return;
   const conn = serverConn(db, r.entryServerId);
   const landingHost = landing.client_host || landing.host;
-  const mech = (db.prepare('SELECT relay_mechanism FROM servers WHERE id = ?').get(r.entryServerId) as Row | undefined)?.relay_mechanism ?? 'socat';
   try {
-    await applyForward(conn, { id: 0, entryPort: r.entryPort, landingHost, targetPort: r.targetPort, mechanism: mech }, true);
+    // id 必须用真实行 id:iptables 规则的删除靠 --comment singray:<id> 匹配,
+    // 传 0 会变成 singray:0,删不中任何规则(残留孤儿规则)
+    await applyForward(conn, { id: r.id, entryPort: r.entryPort, landingHost, targetPort: r.targetPort, mechanism: r.mechanism }, true);
   } catch {
     // 机器侧删除失败不阻断 DB 清理(可用对账发现残留)
   }
@@ -68,10 +55,10 @@ export async function syncTopology(db: DatabaseSync): Promise<SyncResult> {
   for (const d of toCreate) {
     const info = db
       .prepare(
-        `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, include_in_sub, auto, note)
-         VALUES (?,?,?,?,?,?,?,?,?,1,?)`,
+        `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, include_in_sub, auto, core, note)
+         VALUES (?,?,?,?,?,?,?,?,?,1,?,?)`,
       )
-      .run(d.name, d.entryServerId, d.landingServerId, d.targetNodeType, d.targetNodeId, d.entryPort, d.targetPort, d.mechanism, d.includeInSub ? 1 : 0, d.via ? `自动中转(${d.via})` : '自动中转');
+      .run(d.name, d.entryServerId, d.landingServerId, d.targetNodeType, d.targetNodeId, d.entryPort, d.targetPort, d.mechanism, d.includeInSub ? 1 : 0, d.core, d.via ? `自动中转(${d.via})` : '自动中转');
     const rowId = Number(info.lastInsertRowid);
     try {
       const landing = db.prepare('SELECT host, client_host FROM servers WHERE id = ?').get(d.landingServerId) as Row;

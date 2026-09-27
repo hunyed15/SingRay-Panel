@@ -26,6 +26,8 @@ const createSchema = z.object({
   jumpServerId: z.coerce.number().int().nullable().optional(),
   /** 作为中转入口时的转发机制偏好 */
   relayMechanism: z.enum(['iptables', 'socat']).optional(),
+  /** 两跳中转时的中间跳机器(落地机用);null = 清空(引擎自选) */
+  preferViaServerId: z.coerce.number().int().nullable().optional(),
 });
 
 const updateSchema = createSchema.partial();

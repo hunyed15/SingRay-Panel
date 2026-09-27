@@ -29,6 +29,7 @@ export interface ServerRow {
   jump_server_id: number | null;
   ip_stack: string;
   relay_mechanism: string;
+  prefer_via_server_id: number | null;
 }
 
 export interface ServerInput {
@@ -47,6 +48,11 @@ export interface ServerInput {
   jumpServerId?: number | null;
   /** 作为中转入口时的转发机制偏好 */
   relayMechanism?: 'iptables' | 'socat';
+  /**
+   * 两跳中转时指定的中间跳机器(落地机用);null = 引擎自选。
+   * 仅对需要中间跳的落地机(如 IPv6-only)有意义。
+   */
+  preferViaServerId?: number | null;
 }
 
 const SELECT_ALL = 'SELECT * FROM servers';
@@ -97,8 +103,8 @@ export function createServer(db: DatabaseSync, b: ServerInput): Omit<ServerRow, 
   const sshSecret = control === 'ssh' ? encryptSecret(b.sshAuthSecret ?? '') : '';
   const info = db
     .prepare(
-      `INSERT INTO servers (name, role, control, host, client_host, ssh_port, ssh_user, ssh_auth_type, ssh_auth_secret, ssh_sudo, region, jump_server_id, relay_mechanism)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO servers (name, role, control, host, client_host, ssh_port, ssh_user, ssh_auth_type, ssh_auth_secret, ssh_sudo, region, jump_server_id, relay_mechanism, prefer_via_server_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .run(
       b.name,
@@ -114,6 +120,7 @@ export function createServer(db: DatabaseSync, b: ServerInput): Omit<ServerRow, 
       b.region ?? '',
       b.jumpServerId ?? null,
       b.relayMechanism ?? 'socat',
+      b.preferViaServerId ?? null,
     );
   const id = Number(info.lastInsertRowid);
   createRoleSettings(db, id, b.role);
@@ -131,7 +138,7 @@ export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput)
     db.prepare('UPDATE servers SET ssh_auth_secret = ? WHERE id = ?').run(encryptSecret(b.sshAuthSecret), id);
   }
   db.prepare(
-    `UPDATE servers SET name=?, role=?, control=?, host=?, client_host=?, ssh_port=?, ssh_user=?, ssh_auth_type=?, ssh_sudo=?, region=?, jump_server_id=?, relay_mechanism=?
+    `UPDATE servers SET name=?, role=?, control=?, host=?, client_host=?, ssh_port=?, ssh_user=?, ssh_auth_type=?, ssh_sudo=?, region=?, jump_server_id=?, relay_mechanism=?, prefer_via_server_id=?
      WHERE id=?`,
   ).run(
     b.name ?? row.name,
@@ -147,6 +154,7 @@ export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput)
     // jumpServerId:显式传 null 清空,传数字设置,不传保持原值
     b.jumpServerId !== undefined ? b.jumpServerId : row.jump_server_id,
     b.relayMechanism ?? row.relay_mechanism,
+    b.preferViaServerId !== undefined ? b.preferViaServerId : row.prefer_via_server_id,
     id,
   );
 

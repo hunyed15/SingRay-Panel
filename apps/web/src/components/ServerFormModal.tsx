@@ -24,6 +24,7 @@ interface FormValues {
   sshSudo: boolean;
   jumpServerId?: number | null;
   relayMechanism?: 'iptables' | 'socat';
+  preferViaServerId?: number | null;
 }
 
 const ROLE_OPTIONS = [
@@ -71,6 +72,7 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
         sshSudo: record.ssh_sudo === 1,
         jumpServerId: record.jump_server_id ?? null,
         relayMechanism: record.relay_mechanism ?? 'socat',
+        preferViaServerId: record.prefer_via_server_id ?? null,
       });
     } else {
       form.setFieldsValue({
@@ -114,6 +116,8 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
         // 跳板机:显式传值(null = 直连),否则后端保持原值
         base.jumpServerId = values.jumpServerId ?? null;
         (base as any).relayMechanism = values.relayMechanism ?? 'socat';
+        // 中间跳偏好:仅落地机有意义(null = 引擎自选)
+        (base as any).preferViaServerId = values.preferViaServerId ?? null;
         const secret = values.sshAuthSecret.trim();
         // 编辑时凭据留空 = 保持原凭据不修改
         if (!isEdit || secret) base.sshAuthSecret = secret;
@@ -179,8 +183,27 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
             ]}
           />
         </Form.Item>
-        <Form.Item name="control" label="控制方式" rules={[{ required: true }]}>
+        <Form.Item
+          name="control"
+          label="控制方式"
+          rules={[{ required: true }]}
+        >
           <Select options={CONTROL_OPTIONS} />
+        </Form.Item>
+
+        {/* 落地机可能需要经双栈机两跳(如 IPv6-only 落地);此处指定优先走哪台 */}
+        <Form.Item
+          name="preferViaServerId"
+          label="两跳中间跳机器(可选,仅落地机)"
+          tooltip="IPv6-only 落地机无法被 IPv4 中转机直达时,流量经一台双栈机接力。留空 = 引擎自动选择第一台可用双栈机"
+        >
+          <Select
+            allowClear
+            placeholder="自动(引擎选第一台可用双栈机)"
+            options={servers
+              .filter((s) => s.id !== record?.id && s.ip_stack === 'dual')
+              .map((s) => ({ value: s.id, label: `${s.name}(${s.client_host || s.host})` }))}
+          />
         </Form.Item>
 
         {control === 'ssh' ? (

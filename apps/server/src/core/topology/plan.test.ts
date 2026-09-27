@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { migrate } from '../../db/client.js';
-import { canReach, resolvePath, planTopology, hostFamily, loadRelayableNodes, type MachineRef, type NodeRef } from './plan.js';
+import { canReach, resolvePath, planTopology, hostFamily, loadRelayableNodes, diffRules, type MachineRef, type NodeRef } from './plan.js';
 
 // 与生产一致的拓扑
 const M = (over: Partial<MachineRef> & { id: number; name: string }): MachineRef => ({
@@ -129,6 +129,62 @@ describe('topology: loadRelayableNodes filter', () => {
     }
     const got = loadRelayableNodes(db).map((n) => n.name).sort();
     expect(got).toEqual(['hysteria2-node', 'trojan-node', 'vless-node', 'vmess-node', 'x-vless', 'x-vmess']);
+    db.close();
+  });
+});
+
+describe('topology: preferred intermediate hop', () => {
+  it('landing.preferViaServerId overrides the default (first) intermediate', () => {
+    // 默认取第一个合法候选:Oracle(3)。指定优先 Hytron(5) 后应改走 Hytron。
+    const jpPref = machines.map((m) => (m.id === 2 ? { ...m, preferViaServerId: 5 } : m));
+    const rules = planTopology(jpPref, [{ id: 99, name: 'JP-x', type: 'xray', serverId: 2, port: 40001 }]);
+    const mid = rules.find((r) => r.targetNodeType === 'port')!;
+    const land = rules.find((r) => r.targetNodeType === 'xray')!;
+    expect(mid.landingServerId).toBe(5); // CDT → Hytron
+    expect(land.entryServerId).toBe(5);  // Hytron → JP
+    expect(mid.via).toBe('CDT→Hytron→JP');
+  });
+
+  it('preferred hop is ignored when not a legal candidate (falls back to default)', () => {
+    // 指定一台 v4-only 机(4=CDT 是 relay,换成 v4 的落地机 1=Dedirock)作为中间跳 → 非法,回退 Oracle
+    const jpPref = machines.map((m) => (m.id === 2 ? { ...m, preferViaServerId: 1 } : m));
+    const rules = planTopology(jpPref, [{ id: 100, name: 'JP-y', type: 'xray', serverId: 2, port: 40002 }]);
+    const land = rules.find((r) => r.targetNodeType === 'xray')!;
+    expect(land.entryServerId).toBe(3); // 回退到 Oracle
+  });
+
+  it('preference is per-landing: other landings keep the default hop', () => {
+    const jpPref = machines.map((m) => (m.id === 2 ? { ...m, preferViaServerId: 5 } : m));
+    // Dedirock(v4 落地)本就不需要中间跳,应仍是单跳
+    const rules = planTopology(jpPref, [{ id: 101, name: 'DK-x', type: 'xray', serverId: 1, port: 40003 }]);
+    expect(rules.map((r) => r.targetNodeType)).toEqual(['xray']);
+  });
+});
+
+describe('topology: rule core tag', () => {
+  it('tags末跳 with node type and 中间跳 with the same core', () => {
+    const rules = planTopology(machines, [
+      { id: 200, name: 'JP-sb', type: 'singbox', serverId: 2, port: 40101 },
+      { id: 201, name: 'DK-xr', type: 'xray', serverId: 1, port: 40102 },
+    ]);
+    const jpRules = rules.filter((r) => r.entryPort === 40101);
+    expect(jpRules.every((r) => r.core === 'singbox')).toBe(true); // 中间跳也标 singbox
+    const dk = rules.find((r) => r.entryPort === 40102)!;
+    expect(dk.core).toBe('xray');
+  });
+});
+
+describe('topology: diffRules deletion carries the rule own mechanism', () => {
+  it('uses the row mechanism (not the machine current setting) for deletion', () => {
+    const db = new DatabaseSync(':memory:');
+    migrate(db);
+    db.prepare("INSERT INTO servers (name, host, role, relay_mechanism) VALUES ('R','1.2.3.4','relay','socat')").run();
+    db.prepare("INSERT INTO servers (name, host, role) VALUES ('L','5.6.7.8','landing')").run();
+    // 规则本身是 iptables,但机器当前配的是 socat → 删除必须按 iptables 清理
+    db.prepare("INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, auto) VALUES ('stale',1,2,'xray',1,30001,30001,'iptables',1)").run();
+    const diff = diffRules(db, []);
+    expect(diff.toDelete).toHaveLength(1);
+    expect(diff.toDelete[0].mechanism).toBe('iptables');
     db.close();
   });
 });

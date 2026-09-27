@@ -155,7 +155,6 @@ export async function applyForward(
   const { writeFile } = await import('../ssh/executor.js');
   await writeFileFn(conn, `/etc/systemd/system/${unit}`, unitContent, execFn);
   await execFn(conn, `systemctl daemon-reload && systemctl enable --now ${unit}`, { timeoutClass: 'config' });
-  await execFn(conn, `systemctl daemon-reload && systemctl enable --now ${unit}`, { timeoutClass: 'config' });
 }
 
 export interface ReconcileReport {

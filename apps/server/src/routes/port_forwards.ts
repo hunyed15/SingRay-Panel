@@ -82,10 +82,12 @@ export default async function portForwardRoutes(app: FastifyInstance): Promise<v
     const landingHost = landing.client_host || landing.host;
 
     // 先落库拿 id(规则的 singray:<id> 标签用于 reconcile 对账),写规则失败则回删
+    // core:末跳直接取节点类型;纯端口转发(中间跳)无核归属
+    const core = b.targetNodeType === 'port' ? '' : b.targetNodeType;
     const info = db.prepare(
-      `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, include_in_sub, note)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    ).run(b.name, b.entryServerId, b.landingServerId, b.targetNodeType, nodeId, port, b.targetPort, b.mechanism, b.includeInSub ? 1 : 0, b.note ?? '');
+      `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, include_in_sub, core, note)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(b.name, b.entryServerId, b.landingServerId, b.targetNodeType, nodeId, port, b.targetPort, b.mechanism, b.includeInSub ? 1 : 0, core, b.note ?? '');
     const rowId = Number(info.lastInsertRowid);
 
     try {

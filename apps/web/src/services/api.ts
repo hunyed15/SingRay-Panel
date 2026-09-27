@@ -399,6 +399,7 @@ export interface TopologyRule {
   entryPort: number;
   targetPort: number;
   mechanism: string;
+  core: 'singbox' | 'xray';
   via?: string;
   includeInSub: boolean;
 }

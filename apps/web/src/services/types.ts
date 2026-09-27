@@ -75,6 +75,8 @@ export interface Server {
   jump_server_id: number | null;
   ip_stack: 'v4' | 'v6' | 'dual' | 'unknown';
   relay_mechanism: 'iptables' | 'socat';
+  /** 两跳中转时指定的中间跳机器(落地机用);null = 引擎自选 */
+  prefer_via_server_id: number | null;
 }
 
 export interface ServerInput {
@@ -95,6 +97,8 @@ export interface ServerInput {
   /** SSH 跳板机(经它隧道连接) */
   jumpServerId?: number | null;
   relayMechanism?: 'iptables' | 'socat';
+  /** 两跳中转的中间跳机器(落地机用);null = 清空(引擎自选) */
+  preferViaServerId?: number | null;
 }
 
 export interface TestResult {
@@ -255,7 +259,8 @@ export interface PortForwardItem {
   entry_server_name: string;
   landing_server_id: number;
   landing_server_name: string;
-  target_node_type: 'singbox' | 'xray';
+  /** 'port' = 两跳中转的中间跳(不绑定节点) */
+  target_node_type: 'singbox' | 'xray' | 'port';
   target_node_id: number;
   target_node_name: string;
   entry_port: number;
@@ -268,6 +273,8 @@ export interface PortForwardItem {
   created_at: string;
   /** 1 = 拓扑自动生成 */
   auto: number;
+  /** 规则归属核心(singbox/xray);中间跳归并到所属链路的核心 */
+  core: 'singbox' | 'xray' | '';
 }
 
 export interface PortForwardCreateInput {
