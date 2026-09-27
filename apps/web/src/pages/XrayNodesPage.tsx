@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Alert, App, Badge, Button, Flex, Input, Popconfirm, Switch, Table, Tag, Typography } from 'antd';
 import { CopyOutlined, DeleteOutlined, EditOutlined, PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -238,9 +238,17 @@ export function XrayNodesPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           Xray 节点
         </Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          新建 Xray 节点
-        </Button>
+        <Flex gap={8}>
+          <Input.Search
+            allowClear
+            placeholder="按名称搜索"
+            style={{ width: 220 }}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+          />
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+            新建 Xray 节点
+          </Button>
+        </Flex>
       </Flex>
 
       {error && (

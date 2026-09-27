@@ -31,7 +31,7 @@ export function collectSingboxNodes(db: DatabaseSync, realityAddr: RealityAddrMo
        FROM nodes n
        JOIN servers s ON s.id = n.server_id
        LEFT JOIN relay_settings rs ON rs.server_id = s.id
-       WHERE n.enabled = 1 AND n.protocol != 'tunnel'
+       WHERE n.enabled = 1 AND n.protocol NOT IN ('tunnel', 'socks', 'http')
        ORDER BY n.id`,
     )
     .all() as Row[];
@@ -57,7 +57,7 @@ export function collectXrayNodes(db: DatabaseSync, realityAddr: RealityAddrMode 
        FROM xray_nodes n
        JOIN servers s ON s.id = n.server_id
        LEFT JOIN xray_server_settings xs ON xs.server_id = s.id
-       WHERE n.enabled = 1
+       WHERE n.enabled = 1 AND n.protocol NOT IN ('socks', 'http')
        ORDER BY n.id`,
     )
     .all() as Row[];
@@ -108,7 +108,7 @@ export function collectForwardViews(db: DatabaseSync, core: 'singbox' | 'xray', 
                FROM nodes n
                JOIN servers s ON s.id = n.server_id
                LEFT JOIN relay_settings rs ON rs.server_id = s.id
-               WHERE n.id = ? AND n.enabled = 1 AND n.protocol != 'tunnel'`,
+               WHERE n.id = ? AND n.enabled = 1 AND n.protocol NOT IN ('tunnel', 'socks', 'http')`,
             )
             .get(pf.target_node_id) as Row | undefined)
         : (db
@@ -117,7 +117,7 @@ export function collectForwardViews(db: DatabaseSync, core: 'singbox' | 'xray', 
                FROM xray_nodes n
                JOIN servers s ON s.id = n.server_id
                LEFT JOIN xray_server_settings xs ON xs.server_id = s.id
-               WHERE n.id = ? AND n.enabled = 1`,
+               WHERE n.id = ? AND n.enabled = 1 AND n.protocol NOT IN ('socks', 'http')`,
             )
             .get(pf.target_node_id) as Row | undefined);
     if (!n) continue; // 目标节点被删/停用 → 该中转线路退出订阅
