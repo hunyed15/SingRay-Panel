@@ -202,6 +202,8 @@ export function buildXrayConfig(input: XrayMachineInput): Record<string, unknown
   return {
     log: { loglevel: 'warning' },
     stats: {},
+    // 入站流量计数器需要 system 级 policy(Xray 文档: statsInboundUplink/Downlink)
+    policy: { system: { statsInboundUplink: true, statsInboundDownlink: true } },
     api: { tag: 'api', services: ['StatsService'] },
     inbounds,
     outbounds,

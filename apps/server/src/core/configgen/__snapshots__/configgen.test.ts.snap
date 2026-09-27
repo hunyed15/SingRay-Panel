@@ -532,6 +532,12 @@ exports[`xray configgen golden snapshots (6 templates) > machine config: vless r
       "tag": "landing-71",
     },
   ],
+  "policy": {
+    "system": {
+      "statsInboundDownlink": true,
+      "statsInboundUplink": true,
+    },
+  },
   "routing": {
     "domainStrategy": "AsIs",
     "rules": [

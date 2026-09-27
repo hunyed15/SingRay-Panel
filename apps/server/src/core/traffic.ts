@@ -62,13 +62,19 @@ export async function collectMachineTraffic(db: DatabaseSync, serverId: number):
   // v1 仅 xray:sing-box 官方发布版不含 v2ray api(需自编译),其 vless/vmess 线路流量暂不统计
   const targets: { core: 'singbox' | 'xray'; port: number }[] = [{ core: 'xray', port: 18482 }];
   for (const { core, port } of targets) {
+    let rawOut = '';
     try {
       const r = await exec(
         conn,
-        `xray api statsquery --server=127.0.0.1:${port} -pattern "inbound>>>" 2>&1`,
+        `xray api statsquery --server=127.0.0.1:${port} 2>&1 | head -c 400; echo; xray api stats --server=127.0.0.1:${port} -name "inbound>>>" 2>&1 | head -c 150`,
         { timeoutClass: 'quick' },
       );
-      const stats = parseStatsQueryOutput(core, r.stdout);
+      rawOut = r.stdout;
+      const stats = parseStatsQueryOutput(core, rawOut);
+      if (stats.length === 0) {
+        // 诊断可见性:空结果时抛出原始输出片段(核心未含 stats / 命令失败 / 无计数器)
+        throw new Error(`empty-stats raw[${rawOut.length}]: ${rawOut.slice(0, 120).replace(/\s+/g, ' ')}`);
+      }
       const ins = db.prepare(
         'INSERT INTO traffic_samples (server_id, core, tag, uplink, downlink) VALUES (?,?,?,?,?)',
       );
@@ -76,26 +82,28 @@ export async function collectMachineTraffic(db: DatabaseSync, serverId: number):
         ins.run(serverId, core, st.tag, st.uplink, st.downlink);
         collected++;
       }
-    } catch {
-      // 核心未运行/无 stats(旧配置未重部署)→ 跳过该核心
+    } catch (err) {
+      // 单核心失败不阻断;错误带原始输出片段 → collectAllTraffic 摘要可见
+      throw new Error(`${core}@${port}: ${(err as Error).message} | raw[${rawOut.length}]: ${rawOut.slice(0, 120).replace(/\s+/g, ' ')}`);
     }
   }
   return collected;
 }
 
-/** 采集全部 SSH 机器 */
+/** 采集全部 SSH 机器;每机结果(含失败原因)回显到摘要,便于诊断 */
 export async function collectAllTraffic(db: DatabaseSync): Promise<string> {
   const servers = db.prepare("SELECT id, name FROM servers WHERE control = 'ssh' ORDER BY id").all() as { id: number; name: string }[];
-  let tags = 0;
+  const parts: string[] = [];
   for (const s of servers) {
     try {
-      tags += await collectMachineTraffic(db, s.id);
-    } catch {
-      // 单机失败不阻断其它机器
+      const n = await collectMachineTraffic(db, s.id);
+      parts.push(`${s.name}:${n}`);
+    } catch (err) {
+      parts.push(`${s.name}:ERR(${(err as Error).message.slice(0, 80)})`);
     }
   }
   pruneSamples(db);
-  return `${servers.length} 台机器采样完成,${tags} 个入站计数`;
+  return parts.join(' ');
 }
 
 function pruneSamples(db: DatabaseSync): void {
