@@ -1,7 +1,7 @@
-// 流量采集:经 SSH 用机器上的 xray api 客户端查询两个核心的 v2ray 统计 API
-// (xray: 127.0.0.1:18482;sing-box: 127.0.0.1:18481,sing-box 的 v2ray_api 与
-// v2ray StatsService 协议兼容,xray api 客户端可直接查询),把每入站累计计数器
-// 存为采样行;今日用量 = 当日相邻采样差分之和(计数器归零自动处理)。
+// 流量采集:经 SSH 用机器上的 xray api 客户端查询 xray 核心的 v2ray 统计 API
+// (xray: 127.0.0.1:18482),把每入站累计计数器存为采样行;
+// 今日用量 = 当日相邻采样差分之和(计数器归零自动处理)。
+// v1 仅 xray:sing-box 官方发布版不含 v2ray api(需自编译)。
 
 import type { DatabaseSync } from 'node:sqlite';
 import { serverConn } from '../services/conn.js';
@@ -38,11 +38,10 @@ export function parseStatsQueryOutput(core: 'singbox' | 'xray', stdout: string):
     if (!m) continue;
     const [, tag, dir] = m;
     if (tag === 'api-in') continue;
-    const key = tag;
-    const stat = out.get(key) ?? { core, tag, uplink: 0, downlink: 0 };
+    const stat = out.get(tag) ?? { core, tag, uplink: 0, downlink: 0 };
     if (dir === 'uplink') stat.uplink = Number(s.value) || 0;
     else stat.downlink = Number(s.value) || 0;
-    out.set(key, stat);
+    out.set(tag, stat);
   }
   return [...out.values()];
 }
@@ -57,7 +56,7 @@ export function cumulativeDelta(values: number[]): number {
   return sum;
 }
 
-/** 采集单机双核心流量并落采样行;返回采集到的入站数 */
+/** 采集单机 xray 流量并落采样行;返回采集到的入站数 */
 export async function collectMachineTraffic(db: DatabaseSync, serverId: number): Promise<number> {
   const s = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId) as Row | undefined;
   if (!s) throw new Error(`server ${serverId} not found`);
@@ -66,35 +65,18 @@ export async function collectMachineTraffic(db: DatabaseSync, serverId: number):
 
   let collected = 0;
   // v1 仅 xray:sing-box 官方发布版不含 v2ray api(需自编译),其 vless/vmess 线路流量暂不统计
-  const targets: { core: 'singbox' | 'xray'; port: number }[] = [{ core: 'xray', port: 18482 }];
-  for (const { core, port } of targets) {
-    let rawOut = '';
-    try {
-      const r = await exec(
-        conn,
-        `xray api statsquery --server=127.0.0.1:${port} 2>&1 | head -c 400; echo; xray api stats --server=127.0.0.1:${port} -name "inbound>>>" 2>&1 | head -c 150`,
-        { timeoutClass: 'quick' },
-      );
-      rawOut = r.stdout;
-      const stats = parseStatsQueryOutput(core, rawOut);
-      if (stats.length === 0) {
-        // 诊断可见性:空结果时抛出原始输出片段(核心未含 stats / 命令失败 / 无计数器)
-        const rawParsed = (() => { try { return JSON.parse(rawOut.slice(rawOut.indexOf('{'))); } catch { return {}; } })();
-        const statKey = rawParsed.stat ? 'stat' : rawParsed.stats ? 'stats' : 'NONE';
-        const statLen = Array.isArray(rawParsed.stat) ? rawParsed.stat.length : Array.isArray(rawParsed.stats) ? rawParsed.stats.length : -1;
-        throw new Error(`empty-stats statKey=${statKey} statLen=${statLen} raw[${rawOut.length}]: ${rawOut.slice(0, 150).replace(/\s+/g, ' ')}`);
-      }
-      const ins = db.prepare(
-        'INSERT INTO traffic_samples (server_id, core, tag, uplink, downlink) VALUES (?,?,?,?,?)',
-      );
-      for (const st of stats) {
-        ins.run(serverId, core, st.tag, st.uplink, st.downlink);
-        collected++;
-      }
-    } catch (err) {
-      // 单核心失败不阻断;错误带原始输出片段 → collectAllTraffic 摘要可见
-      throw new Error(`${core}@${port}: ${(err as Error).message} | raw[${rawOut.length}]: ${rawOut.slice(0, 120).replace(/\s+/g, ' ')}`);
-    }
+  const r = await exec(
+    conn,
+    `xray api statsquery --server=127.0.0.1:18482 -pattern "inbound>>>" 2>&1`,
+    { timeoutClass: 'quick' },
+  );
+  const stats = parseStatsQueryOutput('xray', r.stdout);
+  const ins = db.prepare(
+    'INSERT INTO traffic_samples (server_id, core, tag, uplink, downlink) VALUES (?,?,?,?,?)',
+  );
+  for (const st of stats) {
+    ins.run(serverId, 'xray', st.tag, st.uplink, st.downlink);
+    collected++;
   }
   return collected;
 }
