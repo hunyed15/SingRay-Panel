@@ -6,6 +6,7 @@ import { CopyOutlined, LinkOutlined } from '@ant-design/icons';
 import * as api from '../services/api';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { SniLibraryCard } from '../components/SniLibraryCard';
+import { OpsCard } from '../components/OpsCard';
 
 interface SlugFormValues {
   subSlug: string;
@@ -217,6 +218,8 @@ export function SettingsPage() {
       </Card>
 
       <SniLibraryCard snis={snis ?? []} onChanged={reloadSnis} />
+
+      <OpsCard />
 
       <Card title="订阅格式说明">
         <Alert

@@ -18,6 +18,15 @@ export const config = {
   singboxVersion: process.env.SINGBOX_VERSION ?? 'latest',
   xrayDownloadBase: process.env.XRAY_DOWNLOAD_BASE ?? 'https://github.com/XTLS/Xray-core/releases/download',
   xrayVersion: process.env.XRAY_VERSION ?? 'latest',
+  // 运维:数据库备份(空 = db 同目录 backups/;保留份数;每日备份小时)
+  backupDir: process.env.PANEL_BACKUP_DIR ?? '',
+  backupRetention: Number(process.env.PANEL_BACKUP_RETENTION ?? 14),
+  backupHour: Number(process.env.PANEL_BACKUP_HOUR ?? 4),
+  // 运维:健康检查间隔(分钟)
+  healthIntervalMin: Number(process.env.PANEL_HEALTH_INTERVAL ?? 5),
+  // 告警:Telegram Bot(未配置 = 仅落库不推送)
+  tgBotToken: process.env.TG_BOT_TOKEN ?? '',
+  tgChatId: process.env.TG_CHAT_ID ?? '',
 };
 
 // 生产防护:对外监听时禁止使用仓库默认密钥(否则任何知道仓库的人可伪造 admin JWT)

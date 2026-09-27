@@ -310,6 +310,40 @@ export const getCertStatus = (id: number): Promise<CertStatusInfo> =>
 export const issueCert = (id: number): Promise<{ ok?: boolean; steps?: string[]; error?: string }> =>
   request<{ ok?: boolean; steps?: string[]; error?: string }>(`/api/servers/${id}/issue-cert`, { method: 'POST' });
 
+export interface SystemJobStatus {
+  name: string;
+  intervalMs: number;
+  lastOk: boolean | null;
+  lastAt: number | null;
+  lastDetail: string;
+  nextInSec: number | null;
+}
+
+export interface BackupFileInfo {
+  file: string;
+  size: number;
+  mtime: number;
+}
+
+export interface SystemStatus {
+  jobs: SystemJobStatus[];
+  backups: BackupFileInfo[];
+  tgConfigured: boolean;
+  healthIntervalMin: number;
+  backupRetention: number;
+}
+
+/** 运维状态(调度器/备份/TG) */
+export const getSystemStatus = (): Promise<SystemStatus> => request<SystemStatus>('/api/system/status');
+
+/** 立即备份数据库 */
+export const runBackupNow = (): Promise<{ ok: true; file: string; size: number }> =>
+  request<{ ok: true; file: string; size: number }>('/api/system/backup', { method: 'POST' });
+
+/** 立即执行一轮健康检查 */
+export const runHealthCheckNow = (): Promise<{ ok: true; summary: string }> =>
+  request<{ ok: true; summary: string }>('/api/system/healthcheck', { method: 'POST' });
+
 export type LifecycleAction = 'install' | 'restart' | 'uninstall';
 
 /** 核心生命周期:install/restart/uninstall(sing-box: /:id/<action>;xray: /:id/xray-<action>,与旧版路径一致) */

@@ -20,6 +20,11 @@ import deployRoutes from './routes/deploy.js';
 import portForwardRoutes from './routes/port_forwards.js';
 import testRoutes from './routes/test.js';
 import subRoutes, { singboxSubRoutes, xraySubRoutes } from './routes/sub.js';
+import systemRoutes from './routes/system.js';
+import { registerJob, startScheduler } from './core/scheduler.js';
+import { runBackupNow, backedUpToday } from './core/backup.js';
+import { runHealthCheckCycle } from './core/healthcheck.js';
+import { recordRun } from './core/alerts.js';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '0.1.0';
@@ -74,6 +79,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(deployRoutes, { prefix: '/api/deploy' });
   await app.register(portForwardRoutes, { prefix: '/api/port-forwards' });
   await app.register(testRoutes, { prefix: '/api/test' });
+  await app.register(systemRoutes, { prefix: '/api/system' });
   // 公开订阅端点(非 /api 前缀,不经过 Bearer 校验)
   await app.register(singboxSubRoutes, { prefix: '/sub/singbox' });
   await app.register(xraySubRoutes, { prefix: '/sub/xray' });
@@ -85,8 +91,25 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
 
 const isMain = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (isMain) {
+  // 运维调度:每日备份(到点且今日未备才执行) + 周期健康检查
   buildApp()
-    .then((app) => app.listen({ port: config.port, host: config.host }))
+    .then(async (app) => {
+      const db = getDb();
+      registerJob('backup', 30 * 60_000, async () => {
+        const hour = new Date().getHours();
+        if (hour !== config.backupHour || backedUpToday()) return '未到备份时间或今日已备份,跳过';
+        const r = runBackupNow(db);
+        recordRun(db, 'backup', true, r.file);
+        return `备份完成: ${r.file}`;
+      });
+      registerJob('healthcheck', config.healthIntervalMin * 60_000, async () => {
+        const summary = await runHealthCheckCycle(db);
+        recordRun(db, 'healthcheck', true, summary);
+        return summary;
+      });
+      startScheduler();
+      await app.listen({ port: config.port, host: config.host });
+    })
     .catch((err) => {
       console.error(err);
       process.exit(1);
