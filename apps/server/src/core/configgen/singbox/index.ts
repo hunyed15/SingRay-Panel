@@ -219,7 +219,7 @@ export function buildMachineConfig(input: SingboxMachineInput): Record<string, u
     inbounds,
     outbounds,
     route: { rules, final: 'direct' },
-    // v2ray 统计 API(仅本机回环):面板经 SSH 用 xray api 客户端查询每入站流量
-    experimental: { v2ray_api: { listen: '127.0.0.1:18481', stats: {} } },
+    // 注:sing-box 官方发布版不含 v2ray api(需 -tags with_v2ray_api 自编译),
+    // 流量统计 v1 仅覆盖 xray 核心;xray 节点流量统计见 core/traffic.ts。
   };
 }

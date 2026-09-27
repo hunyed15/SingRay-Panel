@@ -59,10 +59,8 @@ export async function collectMachineTraffic(db: DatabaseSync, serverId: number):
   const conn = serverConn(db, serverId);
 
   let collected = 0;
-  const targets: { core: 'singbox' | 'xray'; port: number }[] = [
-    { core: 'xray', port: 18482 },
-    { core: 'singbox', port: 18481 },
-  ];
+  // v1 仅 xray:sing-box 官方发布版不含 v2ray api(需自编译),其 vless/vmess 线路流量暂不统计
+  const targets: { core: 'singbox' | 'xray'; port: number }[] = [{ core: 'xray', port: 18482 }];
   for (const { core, port } of targets) {
     try {
       const r = await exec(

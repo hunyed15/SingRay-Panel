@@ -220,12 +220,6 @@ exports[`singbox configgen golden snapshots (11 templates) > inbound: vmess-ws-t
 
 exports[`singbox configgen golden snapshots (11 templates) > machine config with relay node + landing shared inbound 1`] = `
 {
-  "experimental": {
-    "v2ray_api": {
-      "listen": "127.0.0.1:18481",
-      "stats": {},
-    },
-  },
   "inbounds": [
     {
       "listen": "::",
