@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import jwt from '@fastify/jwt';
+import rateLimit from '@fastify/rate-limit';
 import { ZodError } from 'zod';
 import { config } from './config.js';
 import { getDb } from './db/client.js';
@@ -30,6 +31,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   const app = Fastify({ logger: opts.logger ?? true });
 
   await app.register(jwt, { secret: config.jwtSecret });
+  await app.register(rateLimit, { global: false });
 
   // 统一错误出口:HttpError/ZodError → { error };其余 5xx
   app.setErrorHandler((err, _req, reply) => {

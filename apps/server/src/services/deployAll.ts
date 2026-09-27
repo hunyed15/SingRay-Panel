@@ -14,6 +14,7 @@ import { rowConn } from './conn.js';
 import type { SshConn } from '../core/ssh/executor.js';
 import { decrypt, encrypt, genRealityKeypair, genShortId, genSsPassword } from '../core/crypto.js';
 import { serverLifecycle } from './lifecycle.js';
+import { clearDirtyCore } from './deployState.js';
 import { hasRealCert, certPaths } from '../core/certs/acme.js';
 import { config } from '../config.js';
 
@@ -199,8 +200,7 @@ export async function deployServerBothCores(
   // sing-box
   const sbData = collectMachineData(db, serverId);
   if ((!only || only === 'singbox') && (sbData.nodes.some((n) => n.enabled === 1) || sbData.row.role === 'landing')) {
-    try {
-      // 部署前置:机器缺核心二进制时自动先安装(部署=配置下发,前提是核心已装)
+    try {      // 部署前置:机器缺核心二进制时自动先安装(部署=配置下发,前提是核心已装)
       const sbExec = inject?.execFn ?? exec;
       // 真证书优先: 机器上有 ACME 证书(client_host 域名) → certPath 指向它
       const sbDomain = sbData.row.client_host || sbData.row.host;
@@ -220,12 +220,19 @@ export async function deployServerBothCores(
       const cfg = buildMachineConfig({ machine: sbData.machine, landingSettings: sbData.landingSettings ?? undefined, nodes: sbData.nodes, landings: sbData.landings });
       const r = await deployCore(conn, { core: 'singbox', config: cfg, execFn: inject?.execFn, writeFileFn: inject?.writeFileFn });
       base.singbox = { ok: r.ok, error: r.error, steps: [...(sbAutoInstall ? ['auto-install'] : []), ...certSteps, ...r.steps.map((s) => s.step + (s.ok ? '' : '(fail)'))], journal: r.journal };
+      if (r.ok) clearDirtyCore(db, serverId, 'singbox');
     } catch (err) {
       base.singbox = { ok: false, error: (err as Error).message, steps: [] };
     }
   }
 
-  if (only === 'xray') base.singbox = { ok: true, steps: ['skip'], skipped: true };
+  if (only === 'xray') {
+    base.singbox = { ok: true, steps: ['skip'], skipped: true };
+  } else if (!sbData.nodes.some((n) => n.enabled === 1) && sbData.row.role !== 'landing') {
+    // 无可下发的 sing-box 内容 → 该核心无待部署项
+    base.singbox = { ok: true, steps: ['skip'], skipped: true };
+    clearDirtyCore(db, serverId, 'singbox');
+  }
 
   // xray
   const xrData = collectXrayMachineData(db, serverId);
@@ -251,18 +258,24 @@ export async function deployServerBothCores(
       const cfg = buildXrayConfig({ machine: xrData.machine, nodes: xrData.nodes, landings: xrData.landings, xrayLandingSettings: xrData.xrayLandingSettings ?? undefined });
       const r = await deployCore(conn, { core: 'xray', config: cfg, execFn: inject?.execFn, writeFileFn: inject?.writeFileFn });
       base.xray = { ok: r.ok, error: r.error, steps: [...(xrAutoInstall ? ['auto-install'] : []), ...certSteps, ...r.steps.map((s) => s.step + (s.ok ? '' : '(fail)'))], journal: r.journal };
+      if (r.ok) clearDirtyCore(db, serverId, 'xray');
     } catch (err) {
       base.xray = { ok: false, error: (err as Error).message, steps: [] };
     }
   } else {
     base.xray = { ok: true, steps: ['skip'], skipped: true };
+    clearDirtyCore(db, serverId, 'xray');
   }
 
   return base;
 }
 
-/** 部署全部:所有 ssh 机器,并发 ≤3(前序 design.md §2) */
-export async function deployAll(db: DatabaseSync, inject?: Parameters<typeof deployServerBothCores>[2]): Promise<MachineDeployResult[]> {
+/** 部署全部:所有 ssh 机器,并发 ≤3(前序 design.md §2);onProgress 供实时进度轮询 */
+export async function deployAll(
+  db: DatabaseSync,
+  inject?: Parameters<typeof deployServerBothCores>[2],
+  onProgress?: (result: MachineDeployResult) => void,
+): Promise<MachineDeployResult[]> {
   const servers = db.prepare("SELECT id, name FROM servers WHERE control = 'ssh' ORDER BY id").all() as Row[];
   const results: MachineDeployResult[] = new Array(servers.length);
   let cursor = 0;
@@ -279,6 +292,7 @@ export async function deployAll(db: DatabaseSync, inject?: Parameters<typeof dep
           xray: { ok: false, error: (err as Error).message, steps: [] },
         };
       }
+      onProgress?.(results[idx]);
     }
   }
   await Promise.all(Array.from({ length: Math.min(3, servers.length) }, worker));

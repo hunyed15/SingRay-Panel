@@ -25,7 +25,8 @@ const accountSchema = z.object({
 });
 
 export default async function authRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/login', async (req) => {
+  // 登录限流:公网暴露后防爆破(10 次/分钟/IP)
+  app.post('/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
     const b = loginSchema.parse(req.body);
     const db = getDb();
     const row = findUserByUsername(db, b.username);

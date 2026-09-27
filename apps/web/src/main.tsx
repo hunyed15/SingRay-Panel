@@ -12,6 +12,8 @@ import { PortForwardsPage } from './pages/PortForwardsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { MainLayout } from './layouts/MainLayout';
 import { RequireAuth } from './router/RequireAuth';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { NotFoundPage } from './pages/NotFoundPage';
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -28,6 +30,7 @@ const router = createBrowserRouter([
           { path: 'port-forwards', element: <PortForwardsPage /> },
           { path: 'certificates', element: <CertificatesPage /> },
           { path: 'settings', element: <SettingsPage /> },
+          { path: '*', element: <NotFoundPage /> },
         ],
       },
     ],
@@ -38,7 +41,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ConfigProvider locale={zhCN}>
       <AntdApp>
-        <RouterProvider router={router} />
+        <ErrorBoundary>
+          <RouterProvider router={router} />
+        </ErrorBoundary>
       </AntdApp>
     </ConfigProvider>
   </React.StrictMode>,

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getDb } from '../db/client.js';
 import { serverLifecycle } from '../services/lifecycle.js';
 import { batchCreateNodes } from '../services/batchNodes.js';
+import { markDirty } from '../services/deployState.js';
 import { certStatus, issueCert, hasRealCert } from '../core/certs/acme.js';
 import { serverConn } from '../services/conn.js';
 import { decrypt } from '../core/crypto.js';
@@ -88,7 +89,11 @@ export default async function lifecycleRoutes(app: FastifyInstance): Promise<voi
     }
     const conn = serverConn(getDb(), id);
     try {
-      return await issueCert(conn, domain);
+      const r = await issueCert(conn, domain);
+      // 新证书要随部署进入核心配置 → 标记双核心待部署
+      markDirty(getDb(), id, 'singbox');
+      markDirty(getDb(), id, 'xray');
+      return r;
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@fastify/jwt": "^9.0.0",
+    "@fastify/rate-limit": "^11.2.0",
     "@singray/shared": "*",
     "bcryptjs": "^3.0.3",
     "fastify": "^5.2.0",

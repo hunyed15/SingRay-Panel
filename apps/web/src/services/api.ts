@@ -237,8 +237,31 @@ export const reconcilePortForwards = (entryServerId: number): Promise<ForwardRec
 
 // ---------- 一键部署 ----------
 
-export const deployAll = (): Promise<{ results: DeployAllResult[] }> =>
-  request<{ results: DeployAllResult[] }>('/api/deploy/all', { method: 'POST' });
+export interface PendingDeployRow {
+  serverId: number;
+  name: string;
+  singbox: boolean;
+  xray: boolean;
+}
+
+/** 待部署清单(节点/证书变更未下发的机器) */
+export const getDeployPending = (): Promise<PendingDeployRow[]> =>
+  request<PendingDeployRow[]>('/api/deploy/pending');
+
+export interface DeployJobMachine {
+  serverId: number;
+  name: string;
+  status: 'pending' | 'done';
+  result?: DeployAllResult;
+}
+
+/** 启动「部署全部」后台任务 */
+export const startDeployAll = (): Promise<{ jobId: string; machines: DeployJobMachine[] }> =>
+  request<{ jobId: string; machines: DeployJobMachine[] }>('/api/deploy/all', { method: 'POST' });
+
+/** 轮询部署任务进度 */
+export const getDeployJob = (jobId: string): Promise<{ id: string; done: boolean; machines: DeployJobMachine[] }> =>
+  request<{ id: string; done: boolean; machines: DeployJobMachine[] }>(`/api/deploy/status/${jobId}`);
 
 /** 单机部署(sing-box + xray) */
 export const deployServer = (id: number): Promise<DeployAllResult> =>

@@ -5,6 +5,7 @@ import { encryptJson, decryptJson } from './creds.js';
 import { genRandomHex, genPassword } from '../core/crypto.js';
 import { XRAY_TEMPLATE_META, XRAY_PROTOCOL_DEFAULTS, genXrayNodeCreds, xrayNodeDefaults } from './xray_templates.js';
 import { randomFreePort, assertPortFree } from './ports.js';
+import { markDirty } from './deployState.js';
 import { buildShareLink, type NodeView } from '../core/subscribe/index.js';
 import type { NodeRow } from './nodes.js';
 
@@ -159,6 +160,7 @@ export function createXrayNode(db: DatabaseSync, b: XrayNodeInput) {
       '',
       new Date().toISOString(),
     );
+  markDirty(db, b.serverId, 'xray');
   return getXrayNode(db, Number(info.lastInsertRowid));
 }
 
@@ -225,6 +227,7 @@ export function updateXrayNode(db: DatabaseSync, id: number, b: XrayNodeUpdateIn
   if (b.port !== undefined) assertPortFree(db, row.server_id, port, { selfTable: 'xray_nodes', excludeNodeId: id });
 
   const nextWsPath = b.wsPath !== undefined ? b.wsPath : row.ws_path;
+  markDirty(db, row.server_id, 'xray');
   db.prepare(
     `UPDATE xray_nodes SET name=?, protocol=?, listen_port=?, enabled=?, creds_enc=?, tls_mode=?, sni=?, transport=?, ws_path=?, flow=?, outbound_type=?, landing_server_id=?, note=?
      WHERE id=?`,
@@ -250,15 +253,20 @@ export function updateXrayNode(db: DatabaseSync, id: number, b: XrayNodeUpdateIn
 export function toggleXrayNode(db: DatabaseSync, id: number) {
   const row = loadRow(db, id);
   db.prepare('UPDATE xray_nodes SET enabled = ? WHERE id = ?').run(row.enabled ? 0 : 1, id);
+  markDirty(db, row.server_id, 'xray');
   return getXrayNode(db, id);
 }
 
 export function deleteXrayNode(db: DatabaseSync, id: number): void {
-  loadRow(db, id);
+  const row = loadRow(db, id);
   db.prepare('DELETE FROM xray_nodes WHERE id = ?').run(id);
+  markDirty(db, row.server_id, 'xray');
 }
 
 /** 清空所有 xray 节点(不触发部署),可保留一个 */
 export function purgeXrayNodes(db: DatabaseSync, keepId = 0): number {
-  return Number(db.prepare('DELETE FROM xray_nodes WHERE id != ?').run(keepId).changes);
+  const kept = db.prepare('SELECT server_id FROM xray_nodes WHERE id = ?').get(keepId) as { server_id: number } | undefined;
+  const n = Number(db.prepare('DELETE FROM xray_nodes WHERE id != ?').run(keepId).changes);
+  if (kept && n > 0) markDirty(db, kept.server_id, 'xray');
+  return n;
 }

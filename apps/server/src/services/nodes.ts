@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from './errors.js';
 import { encryptJson, decryptJson, type NodeCreds } from './creds.js';
 import { genRandomHex, genPassword } from '../core/crypto.js';
+import { markDirty } from './deployState.js';
 import { TEMPLATE_META, PROTOCOL_DEFAULTS, genNodeCreds, nodeDefaults } from './templates.js';
 import { randomFreePort, assertPortFree } from './ports.js';
 import { buildShareLink, type NodeView } from '../core/subscribe/index.js';
@@ -212,6 +213,7 @@ export function createNode(db: DatabaseSync, b: NodeInput) {
       '',
       new Date().toISOString(),
     );
+  markDirty(db, b.serverId, 'singbox');
   return getNode(db, Number(info.lastInsertRowid));
 }
 
@@ -288,6 +290,7 @@ export function updateNode(db: DatabaseSync, id: number, b: NodeUpdateInput) {
     b.note ?? row.note,
     id,
   );
+  markDirty(db, row.server_id, 'singbox');
   return getNode(db, id);
 }
 
@@ -295,10 +298,12 @@ export function updateNode(db: DatabaseSync, id: number, b: NodeUpdateInput) {
 export function toggleNode(db: DatabaseSync, id: number) {
   const row = loadRow(db, id);
   db.prepare('UPDATE nodes SET enabled = ? WHERE id = ?').run(row.enabled ? 0 : 1, id);
+  markDirty(db, row.server_id, 'singbox');
   return getNode(db, id);
 }
 
 export function deleteNode(db: DatabaseSync, id: number): void {
-  loadRow(db, id);
+  const row = loadRow(db, id);
   db.prepare('DELETE FROM nodes WHERE id = ?').run(id);
+  markDirty(db, row.server_id, 'singbox');
 }

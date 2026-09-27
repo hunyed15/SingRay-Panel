@@ -28,7 +28,7 @@ import * as api from '../services/api';
 import type { Server } from '../services/types';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { ServerFormModal } from '../components/ServerFormModal';
-import { DeployResultModal } from '../components/DeployResultModal';
+import { DeployProgressModal } from '../components/DeployProgressModal';
 import { BatchNodesModal } from '../components/BatchNodesModal';
 import { CertModal } from '../components/CertModal';
 import { EmptyState } from '../components/EmptyState';
@@ -42,14 +42,16 @@ import { CONTROL_META, ROLE_META, SERVER_STATUS_META } from '../utils/status';
 export function ServersPage() {
   const { message } = App.useApp();
   const { data, loading, error, reload } = useAsyncData(async () => {
-    const [servers, snis] = await Promise.all([api.getServers(), api.getSnis()]);
-    return { servers, snis };
+    const [servers, snis, pending] = await Promise.all([api.getServers(), api.getSnis(), api.getDeployPending()]);
+    return { servers, snis, pending };
   });
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Server | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployResults, setDeployResults] = useState<import('../services/types').DeployAllResult[] | null>(null);
+  const [progressJobId, setProgressJobId] = useState<string | null>(null);
+  const [progressOpen, setProgressOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchServer, setBatchServer] = useState<Server | null>(null);
   const [certOpen, setCertOpen] = useState(false);
@@ -57,22 +59,23 @@ export function ServersPage() {
 
   const servers = data?.servers ?? [];
   const snis = data?.snis ?? [];
+  const pending = data?.pending ?? [];
 
   const handleDeployAll = async () => {
     setDeploying(true);
     try {
-      const res = await api.deployAll();
-      setDeployResults(res.results ?? []);
-      const allOk = (res.results ?? []).every(
-        (r) => r.singbox?.ok && (!r.xray || r.xray.ok || r.xray.skipped),
-      );
-      if (allOk) message.success('全部机器部署完成');
-      reload();
+      const res = await api.startDeployAll();
+      setProgressJobId(res.jobId);
+      setProgressOpen(true);
     } catch {
       // 错误提示由 api 层统一弹出
     } finally {
       setDeploying(false);
     }
+  };
+
+  const handleDeployJobFinished = () => {
+    reload();
   };
 
   const handleDeployOne = async (record: Server) => {
@@ -379,6 +382,25 @@ export function ServersPage() {
         />
       )}
 
+      {pending.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          message={`⚠️ ${pending.length} 台机器有未下发的节点/证书变更`}
+          description={
+            <Typography.Text>
+              {pending.map((p) => `${p.name}(${p.singbox ? 'sing-box' : ''}${p.singbox && p.xray ? '+' : ''}${p.xray ? 'xray' : ''})`).join('、')}
+              　—— 变更在部署前不会生效。
+            </Typography.Text>
+          }
+          action={
+            <Button size="small" type="primary" loading={deploying} onClick={handleDeployAll}>
+              立即部署全部
+            </Button>
+          }
+        />
+      )}
+
       <Alert
         type="info"
         showIcon
@@ -441,10 +463,11 @@ export function ServersPage() {
         onClose={() => setBatchOpen(false)}
         onDone={reload}
       />
-      <DeployResultModal
-        open={deployResults !== null}
-        results={deployResults ?? []}
-        onClose={() => setDeployResults(null)}
+      <DeployProgressModal
+        open={progressOpen}
+        jobId={progressJobId}
+        onClose={() => setProgressOpen(false)}
+        onFinished={handleDeployJobFinished}
       />
     </Flex>
   );
