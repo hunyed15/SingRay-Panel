@@ -225,7 +225,8 @@ export async function deployServerBothCores(
         // 部署成功后查询核心版本并写库(否则版本信息只在 install 时更新)
         try {
           const v = await (inject?.execFn ?? exec)(conn, 'sing-box version 2>/dev/null | head -1', { timeoutClass: 'quick' });
-          db.prepare('UPDATE servers SET singbox_version = ? WHERE id = ?').run(v.stdout.trim(), serverId);
+          const ver = v.stdout.match(/\d+\.\d+\.\d+/)?.[0] ?? v.stdout.trim();
+          db.prepare('UPDATE servers SET singbox_version = ? WHERE id = ?').run(ver, serverId);
         } catch { /* 版本查询失败不阻断 */ }
       }
     } catch (err) {
@@ -269,7 +270,8 @@ export async function deployServerBothCores(
         clearDirtyCore(db, serverId, 'xray');
         try {
           const v = await (inject?.execFn ?? exec)(conn, 'xray version 2>/dev/null | head -1', { timeoutClass: 'quick' });
-          db.prepare('UPDATE servers SET xray_version = ? WHERE id = ?').run(v.stdout.trim(), serverId);
+          const ver = v.stdout.match(/\d+\.\d+\.\d+/)?.[0] ?? v.stdout.trim();
+          db.prepare('UPDATE servers SET xray_version = ? WHERE id = ?').run(ver, serverId);
         } catch { /* 版本查询失败不阻断 */ }
       }
     } catch (err) {
