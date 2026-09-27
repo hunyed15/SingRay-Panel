@@ -34,8 +34,7 @@ export const CONTROL_META: Record<ControlMode, { text: string; tagColor: 'defaul
 export const PROTOCOL_META: Record<NodeProtocol, { text: string; tagColor: string }> = {
   vless: { text: 'VLESS', tagColor: 'blue' },
   vmess: { text: 'VMess', tagColor: 'geekblue' },
-  trojan: { text: 'Trojan', tagColor: 'purple' },
-  shadowsocks: { text: 'SS-2022', tagColor: 'green' },
+  anytls: { text: 'AnyTLS', tagColor: 'purple' },
   hysteria: { text: 'Hysteria2', tagColor: 'volcano' },
   socks: { text: 'SOCKS', tagColor: 'orange' },
   http: { text: 'HTTP', tagColor: 'gold' },
@@ -48,8 +47,6 @@ export const PROTOCOL_META: Record<NodeProtocol, { text: string; tagColor: strin
 export const XRAY_PROTOCOL_META: Record<XrayNodeProtocol, { text: string; tagColor: string }> = {
   vless: { text: 'VLESS', tagColor: 'blue' },
   vmess: { text: 'VMess', tagColor: 'geekblue' },
-  trojan: { text: 'Trojan', tagColor: 'purple' },
-  shadowsocks: { text: 'SS', tagColor: 'green' },
   socks: { text: 'SOCKS', tagColor: 'orange' },
   http: { text: 'HTTP', tagColor: 'gold' },
 };

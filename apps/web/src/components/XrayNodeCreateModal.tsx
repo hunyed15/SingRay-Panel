@@ -32,8 +32,7 @@ interface FormValues {
 const TEMPLATES: { key: XrayNodeTemplate; title: string; desc: string }[] = [
   { key: 'xray-vless-reality', title: 'VLESS + Reality', desc: 'XTLS · xtls-rprx-vision flow' },
   { key: 'xray-vmess-ws-tls', title: 'VMess + WS + TLS', desc: '自签证书' },
-  { key: 'xray-trojan-tls', title: 'Trojan + TLS', desc: '自签证书' },
-  { key: 'xray-ss', title: 'Shadowsocks AEAD', desc: 'aes-128-gcm 加密' },
+  { key: 'xray-vless-xhttp', title: 'VLESS + XHTTP', desc: 'Reality 借站 · 2025+ 新传输' },
   { key: 'xray-socks', title: 'SOCKS', desc: '通用代理' },
   { key: 'xray-http', title: 'HTTP', desc: '通用代理' },
 ];
@@ -93,7 +92,7 @@ export function XrayNodeCreateModal({
         landingServerId:
           values.outboundType === 'relay' ? Number(values.landingServerId) : undefined,
         sni:
-          template === 'xray-vless-reality'
+          template === 'xray-vless-reality' || template === 'xray-vless-xhttp'
             ? values.sni ?? snis[0]?.domain ?? 'www.microsoft.com'
             : undefined,
         flow: template === 'xray-vless-reality' ? values.flow || 'xtls-rprx-vision' : undefined,

@@ -75,19 +75,19 @@ describe('api integration (fastify.inject)', () => {
       method: 'POST',
       url: '/api/nodes',
       headers: auth,
-      payload: { template: 'trojan-tls', name: 'n1', serverId: srv.id, port: 30001 },
+      payload: { template: 'vmess-ws-tls', name: 'n1', serverId: srv.id, port: 30001 },
     });
     expect(created.statusCode).toBe(200);
     const node = created.json();
-    expect(node.protocol).toBe('trojan');
+    expect(node.protocol).toBe('vmess');
     expect(node.listen_port).toBe(30001);
-    expect(node.share_link).toMatch(/^trojan:\/\//);
+    expect(node.share_link).toMatch(/^vmess:\/\//);
 
     const dup = await app.inject({
       method: 'POST',
       url: '/api/nodes',
       headers: auth,
-      payload: { template: 'trojan-tls', name: 'n2', serverId: srv.id, port: 30001 },
+      payload: { template: 'vmess-ws-tls', name: 'n2', serverId: srv.id, port: 30001 },
     });
     expect(dup.statusCode).toBe(409);
 

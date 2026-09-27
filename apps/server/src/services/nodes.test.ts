@@ -75,7 +75,7 @@ describe('servers service', () => {
   });
 
   it('delete blocked when referenced by nodes (409)', () => {
-    createNode(db, { template: 'trojan-tls', name: 'n1', serverId: relay.id, port: 30001 });
+    createNode(db, { template: 'vmess-ws-tls', name: 'n1', serverId: relay.id, port: 30001 });
     expect(() => deleteServer(db, relay.id)).toThrow(HttpError);
     try {
       deleteServer(db, relay.id);
@@ -110,12 +110,12 @@ describe('nodes service (db roundtrip)', () => {
   });
 
   it('create with explicit port; duplicate port → 409', () => {
-    const n1 = createNode(db, { template: 'trojan-tls', name: 'n1', serverId: relay.id, port: 30005 });
+    const n1 = createNode(db, { template: 'vmess-ws-tls', name: 'n1', serverId: relay.id, port: 30005 });
     expect(n1.listen_port).toBe(30005);
-    expect(n1.share_link).toMatch(/^trojan:\/\//);
-    expect(() => createNode(db, { template: 'trojan-tls', name: 'n2', serverId: relay.id, port: 30005 })).toThrow(HttpError);
+    expect(n1.share_link).toMatch(/^vmess:\/\//);
+    expect(() => createNode(db, { template: 'vmess-ws-tls', name: 'n2', serverId: relay.id, port: 30005 })).toThrow(HttpError);
     try {
-      createNode(db, { template: 'trojan-tls', name: 'n2', serverId: relay.id, port: 30005 });
+      createNode(db, { template: 'vmess-ws-tls', name: 'n2', serverId: relay.id, port: 30005 });
     } catch (e) {
       expect((e as HttpError).status).toBe(409);
     }
@@ -133,9 +133,9 @@ describe('nodes service (db roundtrip)', () => {
     expect(n.auth_user).toBe('alice');
     expect(n.auth_password).toBe('pw123');
     expect(n.share_link).toBe('socks5://alice:pw123@10.0.0.1:30010#s1'); // socks 带认证的分享链接
-    const trojan = createNode(db, { template: 'trojan-tls', name: 't1', serverId: relay.id, port: 30011 });
-    expect(trojan.auth_user).toBeUndefined();
-    expect(trojan.auth_password).toBeUndefined();
+    const other = createNode(db, { template: 'vmess-ws-tls', name: 't1', serverId: relay.id, port: 30011 });
+    expect(other.auth_user).toBeUndefined();
+    expect(other.auth_password).toBeUndefined();
   });
 
   it('tunnel node requires tunnelAddress/tunnelPort and persists relay fields', () => {
@@ -168,7 +168,7 @@ describe('nodes service (db roundtrip)', () => {
   });
 
   it('protocol change regenerates creds and defaults', () => {
-    const n = createNode(db, { template: 'trojan-tls', name: 'n', serverId: relay.id, port: 30014 });
+    const n = createNode(db, { template: 'vmess-ws-tls', name: 'n', serverId: relay.id, port: 30014 });
     const oldCreds = decryptJson(rawNode(n.id).creds_enc);
     const updated = updateNode(db, n.id, { protocol: 'vless' });
     expect(updated.protocol).toBe('vless');
@@ -181,7 +181,7 @@ describe('nodes service (db roundtrip)', () => {
   });
 
   it('toggle flips enabled; delete removes row', () => {
-    const n = createNode(db, { template: 'ss2022', name: 'n', serverId: relay.id, port: 30015 });
+    const n = createNode(db, { template: 'vmess-ws-tls', name: 'n', serverId: relay.id, port: 30015 });
     const off = toggleNode(db, n.id);
     expect(off.enabled).toBe(0);
     const on = toggleNode(db, n.id);
@@ -205,10 +205,10 @@ describe('xray nodes service', () => {
   });
 
   it('port uniqueness is checked against both node tables (409)', () => {
-    createNode(db, { template: 'trojan-tls', name: 'sb', serverId: relay.id, port: 31002 });
+    createNode(db, { template: 'vmess-ws-tls', name: 'sb', serverId: relay.id, port: 31002 });
     // sing-box 已占 31002 → xray 节点同端口 409(旧版此处会落 sqlite UNIQUE 报 500)
-    expect(() => createXrayNode(db, { template: 'xray-trojan-tls', name: 'x', serverId: relay.id, port: 31002 })).toThrow(HttpError);
-    const x = createXrayNode(db, { template: 'xray-trojan-tls', name: 'x', serverId: relay.id, port: 31003 });
+    expect(() => createXrayNode(db, { template: 'xray-vless-xhttp', name: 'x', serverId: relay.id, port: 31002 })).toThrow(HttpError);
+    const x = createXrayNode(db, { template: 'xray-vless-xhttp', name: 'x', serverId: relay.id, port: 31003 });
     expect(() => assertPortFree(db, relay.id, 31003, { selfTable: 'xray_nodes' })).toThrow(HttpError);
     // 编辑排除自身
     updateXrayNode(db, x.id, { port: 31003 });
@@ -216,7 +216,7 @@ describe('xray nodes service', () => {
   });
 
   it('purge keeps one node', () => {
-    const a = createXrayNode(db, { template: 'xray-ss', name: 'a', serverId: relay.id, port: 31004 });
+    const a = createXrayNode(db, { template: 'xray-socks', name: 'a', serverId: relay.id, port: 31004 });
     createXrayNode(db, { template: 'xray-http', name: 'b', serverId: relay.id, port: 31005 });
     const deleted = purgeXrayNodes(db, a.id);
     expect(deleted).toBe(1);

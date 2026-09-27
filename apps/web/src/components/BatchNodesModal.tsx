@@ -6,14 +6,14 @@ import type { Server, SniItem } from '../services/types';
 /** 各核心的默认勾选模板(落地机标准矩阵) */
 const DEFAULT_TEMPLATES: Record<'singbox' | 'xray', string[]> = {
   // 默认只勾选 Xray 核心也支持的协议(vless/vmess/trojan);ss2022/hy2/tuic 按需手动勾
-  singbox: ['vless-reality', 'vmess-ws-tls', 'trojan-tls'],
+  singbox: ['vless-reality', 'vmess-ws-tls'],
   xray: ['xray-vless-reality', 'xray-vmess-ws-tls', 'xray-trojan-tls', 'xray-ss', 'xray-socks', 'xray-http'],
 };
 
 const SINGBOX_TEMPLATES: { key: string; label: string }[] = [
   { key: 'vless-reality', label: 'VLESS + Reality' },
   { key: 'vmess-ws-tls', label: 'VMess + WS + TLS' },
-  { key: 'trojan-tls', label: 'Trojan + TLS' },
+  { key: 'anytls', label: 'AnyTLS' },
   { key: 'ss2022', label: 'Shadowsocks 2022' },
   { key: 'hysteria', label: 'Hysteria2' },
   { key: 'tuic', label: 'TUIC' },
@@ -26,8 +26,7 @@ const SINGBOX_TEMPLATES: { key: string; label: string }[] = [
 const XRAY_TEMPLATES: { key: string; label: string }[] = [
   { key: 'xray-vless-reality', label: 'VLESS + Reality' },
   { key: 'xray-vmess-ws-tls', label: 'VMess + WS + TLS' },
-  { key: 'xray-trojan-tls', label: 'Trojan + TLS' },
-  { key: 'xray-ss', label: 'Shadowsocks AEAD' },
+  { key: 'xray-vless-xhttp', label: 'VLESS + XHTTP' },
   { key: 'xray-socks', label: 'SOCKS5' },
   { key: 'xray-http', label: 'HTTP' },
 ];

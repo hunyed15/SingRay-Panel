@@ -41,6 +41,7 @@ interface FormValues {
   landingServerId?: number;
   sni?: string;
   flow?: string;
+  wsPath?: string;
   authUser?: string;
   authPassword?: string;
 }
@@ -114,7 +115,10 @@ export function XrayNodeEditModal({
           values.outboundType === 'relay' ? Number(values.landingServerId) : undefined,
         sni: values.protocol === 'vless' ? values.sni : undefined,
         flow:
-          values.protocol === 'vless' ? values.flow || 'xtls-rprx-vision' : undefined,
+          values.protocol === 'vless' && node.transport !== 'xhttp'
+            ? values.flow || 'xtls-rprx-vision'
+            : undefined,
+        wsPath: node.transport === 'xhttp' ? values.wsPath : undefined,
         authUser:
           values.protocol === 'socks' || values.protocol === 'http' ? values.authUser : undefined,
         authPassword:
@@ -201,9 +205,15 @@ export function XrayNodeEditModal({
             <Form.Item name="sni" label="Reality 借站域名(SNI)">
               <Select options={sniOptions} showSearch />
             </Form.Item>
-            <Form.Item name="flow" label="Flow 控制" tooltip="xtls-rprx-vision 为推荐的 VLESS 流控">
-              <Input placeholder="xtls-rprx-vision" />
-            </Form.Item>
+            {node?.transport === 'xhttp' ? (
+              <Form.Item name="wsPath" label="XHTTP 路径" tooltip="修改后需重新部署,客户端订阅同步">
+                <Input placeholder="/xhttp-xxxx" />
+              </Form.Item>
+            ) : (
+              <Form.Item name="flow" label="Flow 控制" tooltip="xtls-rprx-vision 为推荐的 VLESS 流控">
+                <Input placeholder="xtls-rprx-vision" />
+              </Form.Item>
+            )}
           </>
         )}
         {(protocol === 'socks' || protocol === 'http') && (

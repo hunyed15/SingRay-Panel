@@ -5,8 +5,7 @@ import { genUuid, genSsPassword, genRandomHex, genPassword } from '../core/crypt
 export const TEMPLATE_META: Record<string, { protocol: string; tlsMode: string; transport: string }> = {
   'vless-reality': { protocol: 'vless', tlsMode: 'reality', transport: 'raw' },
   'vmess-ws-tls': { protocol: 'vmess', tlsMode: 'tls', transport: 'ws' },
-  'trojan-tls': { protocol: 'trojan', tlsMode: 'tls', transport: 'raw' },
-  ss2022: { protocol: 'shadowsocks', tlsMode: 'none', transport: 'raw' },
+  anytls: { protocol: 'anytls', tlsMode: 'reality', transport: 'raw' },
   hysteria: { protocol: 'hysteria', tlsMode: 'tls', transport: 'raw' },
   socks: { protocol: 'socks', tlsMode: 'none', transport: 'raw' },
   http: { protocol: 'http', tlsMode: 'none', transport: 'raw' },
@@ -20,8 +19,7 @@ export const TEMPLATE_META: Record<string, { protocol: string; tlsMode: string; 
 export const PROTOCOL_DEFAULTS: Record<string, { tlsMode: string; transport: string }> = {
   vless: { tlsMode: 'reality', transport: 'raw' },
   vmess: { tlsMode: 'tls', transport: 'ws' },
-  trojan: { tlsMode: 'tls', transport: 'raw' },
-  shadowsocks: { tlsMode: 'none', transport: 'raw' },
+  anytls: { tlsMode: 'reality', transport: 'raw' },
   hysteria: { tlsMode: 'tls', transport: 'raw' },
   socks: { tlsMode: 'none', transport: 'raw' },
   http: { tlsMode: 'none', transport: 'raw' },
@@ -38,10 +36,8 @@ export function genNodeCreds(protocol: string): Record<string, string> {
       return { uuid: genUuid() }; // 不带 flow:reality+vision 不兼容
     case 'vmess':
       return { uuid: genUuid() };
-    case 'trojan':
-      return { password: genSsPassword() };
-    case 'shadowsocks':
-      return { method: '2022-blake3-aes-128-gcm', password: genSsPassword() };
+    case 'anytls':
+      return { password: genPassword() };
     case 'hysteria':
       return { password: genSsPassword() };
     case 'tuic':

@@ -15,8 +15,7 @@ describe('singbox templates (ported from old templates.js)', () => {
   it('genNodeCreds generates per-protocol shapes', () => {
     expect(genNodeCreds('vless').uuid).toMatch(/^[0-9a-f-]{36}$/);
     expect(genNodeCreds('vmess').uuid).toBeTruthy();
-    expect(genNodeCreds('trojan').password).toBeTruthy();
-    expect(genNodeCreds('shadowsocks')).toMatchObject({ method: '2022-blake3-aes-128-gcm' });
+    expect(genNodeCreds('anytls').password).toBeTruthy();
     expect(genNodeCreds('tuic')).toHaveProperty('uuid');
     expect(genNodeCreds('tuic')).toHaveProperty('password');
     // tunnel 无凭据;socks/http 默认生成凭据(防扫描滥用)
@@ -49,9 +48,10 @@ describe('xray templates (ported from old xrayconfig/templates.js)', () => {
     const vless = genXrayNodeCreds('vless', '');
     expect(vless.uuid).toMatch(/^[0-9a-f-]{36}$/);
     expect(vless.flow).toBe('xtls-rprx-vision');
-    expect(genXrayNodeCreds('shadowsocks', '')).toMatchObject({ method: 'aes-128-gcm' });
     expect(genXrayNodeCreds('socks', '')).toHaveProperty('username');
     expect(genXrayNodeCreds('http', '')).toHaveProperty('password');
+    // xhttp 模板:vless flow 由调用方置空(transport 由 meta 决定)
+    expect(XRAY_TEMPLATE_META['xray-vless-xhttp'].transport).toBe('xhttp');
   });
 
   it('xrayNodeDefaults: vmess ws path prefixed /xray-ws-', () => {

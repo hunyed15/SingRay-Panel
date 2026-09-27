@@ -70,6 +70,7 @@ export function collectXrayNodes(db: DatabaseSync, realityAddr: RealityAddrMode 
       name: r.name,
       protocol: r.protocol,
       host: addrFor(r, realityAddr, r.protocol === 'vless' && !!r.reality_public_key),
+      transport: r.transport,
       port: r.listen_port,
       sni: r.sni || r.host,
       ws_path: r.ws_path,

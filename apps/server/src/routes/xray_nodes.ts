@@ -35,6 +35,7 @@ const updateSchema = z.object({
   note: z.string().optional(),
   authUser: z.string().optional(),
   authPassword: z.string().optional(),
+  wsPath: z.string().optional(),
 });
 
 const idParam = z.object({ id: z.coerce.number().int() });

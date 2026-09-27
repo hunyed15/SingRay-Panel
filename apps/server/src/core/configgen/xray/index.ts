@@ -14,7 +14,7 @@ export interface XrayNodeRow {
   creds: XrayCreds;
   tls_mode: 'none' | 'reality' | 'tls';
   sni: string;
-  transport: 'raw' | 'ws' | 'tcp';
+  transport: 'raw' | 'ws' | 'tcp' | 'xhttp';
   ws_path: string;
   flow: string;
   outbound_type: 'direct' | 'relay';
@@ -60,24 +60,36 @@ export function buildXrayInbound(node: XrayNodeRow, machine: MachineCtx): Record
       if (!machine.realityPrivateKey || !machine.shortId) {
         throw new Error(`machine ${machine.name}: vless reality requires relay settings`);
       }
+      // xhttp 与 vision flow 不兼容(xhttp 模板 flow 为空)
+      const flow = node.transport === 'xhttp' ? '' : node.flow || 'xtls-rprx-vision';
+      const reality = {
+        dest: `${node.sni}:443`,
+        serverNames: [node.sni],
+        privateKey: machine.realityPrivateKey,
+        shortIds: [machine.shortId],
+        xver: 0,
+      };
+      const stream =
+        node.transport === 'xhttp'
+          ? {
+              network: 'xhttp',
+              xhttpSettings: { path: node.ws_path || '/xhttp', mode: 'auto' },
+              security: 'reality',
+              realitySettings: reality,
+            }
+          : {
+              network: 'tcp',
+              security: 'reality',
+              realitySettings: reality,
+            };
       return {
         ...base,
         protocol: 'vless',
         settings: {
-          clients: [{ id: creds.uuid, flow: node.flow || 'xtls-rprx-vision' }],
+          clients: [{ id: creds.uuid, flow }],
           decryption: 'none',
         },
-        streamSettings: {
-          network: 'tcp',
-          security: 'reality',
-          realitySettings: {
-            dest: `${node.sni}:443`,
-            serverNames: [node.sni],
-            privateKey: machine.realityPrivateKey,
-            shortIds: [machine.shortId],
-            xver: 0,
-          },
-        },
+        streamSettings: stream,
         sniffing: { enabled: true, destOverride: ['http', 'tls'] },
       };
     }

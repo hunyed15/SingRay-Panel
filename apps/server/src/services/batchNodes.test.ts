@@ -13,9 +13,9 @@ function seedDb() {
 describe('batchCreateNodes', () => {
   it('creates one node per template with convention names and unique ports', () => {
     const db = seedDb();
-    const r = batchCreateNodes(db, 1, { core: 'singbox', templates: ['vless-reality', 'vmess-ws-tls', 'trojan-tls'], realitySni: 'dl.google.com' });
+    const r = batchCreateNodes(db, 1, { core: 'singbox', templates: ['vless-reality', 'vmess-ws-tls', 'anytls'], realitySni: 'dl.google.com' });
     expect(r.created.map((c) => c.name).sort()).toEqual([
-      'Dedirock-trojan-tls-sb', 'Dedirock-vless-reality-sb', 'Dedirock-vmess-ws-tls-sb',
+      'Dedirock-anytls-sb', 'Dedirock-vless-reality-sb', 'Dedirock-vmess-ws-tls-sb',
     ]);
     const ports = r.created.map((c) => c.port);
     expect(new Set(ports).size).toBe(ports.length); // 端口唯一
@@ -27,14 +27,14 @@ describe('batchCreateNodes', () => {
   it('skips templates that already exist on the machine (same protocol+tls+transport)', () => {
     const db = seedDb();
     batchCreateNodes(db, 1, { core: 'singbox', templates: ['vless-reality'], realitySni: 'dl.google.com' });
-    const r2 = batchCreateNodes(db, 1, { core: 'singbox', templates: ['vless-reality', 'ss2022'], realitySni: 'dl.google.com' });
-    expect(r2.created.map((c) => c.name)).toEqual(['Dedirock-ss2022-sb']);
+    const r2 = batchCreateNodes(db, 1, { core: 'singbox', templates: ['vless-reality', 'anytls'], realitySni: 'dl.google.com' });
+    expect(r2.created.map((c) => c.name)).toEqual(['Dedirock-anytls-sb']);
     expect(r2.skipped).toEqual([{ template: 'vless-reality', reason: expect.stringContaining('已存在') }]);
   });
 
   it('unknown template is skipped, not fatal; empty templates rejected', () => {
     const db = seedDb();
-    const r = batchCreateNodes(db, 1, { core: 'xray', templates: ['xray-ss', 'nope'] });
+    const r = batchCreateNodes(db, 1, { core: 'xray', templates: ['xray-socks', 'nope'] });
     expect(r.created).toHaveLength(1);
     expect(r.skipped).toEqual([{ template: 'nope', reason: '未知模板' }]);
     expect(() => batchCreateNodes(db, 1, { core: 'xray', templates: [] })).toThrow();

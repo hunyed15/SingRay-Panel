@@ -8,6 +8,8 @@ export interface NodeView {
   protocol: string;
   /** 对外地址(reality 节点按订阅设置用 IP 或域名,由收集层决策) */
   host: string;
+  /** 传输层(raw/ws/xhttp);xray vless xhttp 分发需要 */
+  transport?: string;
   port: number;
   sni: string;
   ws_path: string;
@@ -33,9 +35,13 @@ export function buildShareLink(view: NodeView): string | null {
   switch (view.protocol) {
     case 'vless': {
       const flowParam = c.flow ? `&flow=${c.flow}` : '';
+      const transportQ =
+        view.transport === 'xhttp' && view.ws_path
+          ? `&type=xhttp&path=${encodeURIComponent(view.ws_path)}&mode=auto`
+          : '&type=tcp';
       return (
         `vless://${c.uuid}@${host}:${port}?encryption=none&security=reality&sni=${sni}` +
-        `&fp=chrome&pbk=${view.realityPublicKey}&sid=${view.shortId}&type=tcp${flowParam}#${enc}`
+        `&fp=chrome&pbk=${view.realityPublicKey}&sid=${view.shortId}${transportQ}${flowParam}#${enc}`
       );
     }
     case 'vmess': {
@@ -110,6 +116,9 @@ function buildClientOutbound(view: NodeView): Record<string, unknown> | null {
           utls: { enabled: true, fingerprint: 'chrome' },
           reality: { enabled: true, public_key: view.realityPublicKey, short_id: view.shortId },
         },
+        ...(view.transport === 'xhttp'
+          ? { transport: { type: 'xhttp', path: view.ws_path || '/', mode: 'auto' } }
+          : {}),
       };
     case 'vmess':
       return {

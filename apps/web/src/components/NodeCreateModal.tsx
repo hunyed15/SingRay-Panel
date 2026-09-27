@@ -35,8 +35,7 @@ interface FormValues {
 const TEMPLATES: { key: NodeTemplate; title: string; desc: string }[] = [
   { key: 'vless-reality', title: 'VLESS + Reality', desc: '主力 · 借站 SNI · 零证书' },
   { key: 'vmess-ws-tls', title: 'VMess + WS + TLS', desc: '兼容老客户端 · 自签证书' },
-  { key: 'trojan-tls', title: 'Trojan + TLS', desc: '自签证书' },
-  { key: 'ss2022', title: 'Shadowsocks-2022', desc: '极简 · 客户端覆盖广' },
+  { key: 'anytls', title: 'AnyTLS', desc: '2025+ 新协议 · Reality 借站 · 零证书' },
   { key: 'hysteria', title: 'Hysteria2', desc: 'UDP 加速 · 弱网友好' },
   { key: 'socks', title: 'SOCKS', desc: '通用代理' },
   { key: 'http', title: 'HTTP', desc: '通用代理' },

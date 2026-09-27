@@ -120,6 +120,25 @@ export function buildInbound(node: SingboxNodeRow, machine: MachineCtx): Record<
         users: [{ password: creds.password }],
         handshake: { server: node.sni, server_port: 443 },
       };
+    case 'anytls': {
+      // AnyTLS:reality 借站,单密码凭据(2025+ 新协议)
+      const { privateKey, shortId } = requireReality(machine);
+      return {
+        type: 'anytls',
+        ...listen,
+        users: [{ password: creds.password }],
+        tls: {
+          enabled: true,
+          server_name: node.sni,
+          reality: {
+            enabled: true,
+            handshake: { server: node.sni, server_port: 443 },
+            private_key: privateKey,
+            short_id: [shortId],
+          },
+        },
+      };
+    }
     case 'naive':
       return {
         type: 'naive',

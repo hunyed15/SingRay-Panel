@@ -32,6 +32,8 @@ export interface XrayNodeUpdateInput {
   /** socks/http 认证(用户未填且为空时由生成值兜底) */
   authUser?: string;
   authPassword?: string;
+  /** xhttp 传输路径 */
+  wsPath?: string;
 }
 
 const SELECT_JOIN = `SELECT n.*, s.name AS server_name, g.name AS landing_name
@@ -131,9 +133,10 @@ export function createXrayNode(db: DatabaseSync, b: XrayNodeInput) {
   const port = b.port ? Number(b.port) : randomFreePort([...used, ...sbUsed]);
   if (b.port) assertPortFree(db, b.serverId, port, { selfTable: 'xray_nodes' });
 
-  const flow = meta.protocol === 'vless' ? (b.flow || 'xtls-rprx-vision') : '';
+  // xhttp 与 vision flow 不兼容
+  const flow = meta.protocol === 'vless' && meta.transport !== 'xhttp' ? (b.flow || 'xtls-rprx-vision') : '';
   const creds = genXrayNodeCreds(meta.protocol, flow);
-  const { sni, wsPath } = xrayNodeDefaults(meta.protocol, server.client_host || server.host, b.sni);
+  const { sni, wsPath } = xrayNodeDefaults(meta.protocol, server.client_host || server.host, b.sni, meta.transport);
 
   const info = db
     .prepare(
@@ -201,6 +204,11 @@ export function updateXrayNode(db: DatabaseSync, id: number, b: XrayNodeUpdateIn
     };
   }
 
+  // xhttp 与 vision flow 不兼容:传输为 xhttp 时强制清空 flow
+  if ((b.wsPath !== undefined || row.transport === 'xhttp') && protocol === 'vless' && row.transport === 'xhttp') {
+    flow = '';
+  }
+
   const outboundType = b.outboundType ?? row.outbound_type;
   let landingId = row.landing_server_id;
   if (b.outboundType === 'direct') landingId = null;
@@ -216,6 +224,7 @@ export function updateXrayNode(db: DatabaseSync, id: number, b: XrayNodeUpdateIn
   const port = b.port !== undefined ? Number(b.port) : row.listen_port;
   if (b.port !== undefined) assertPortFree(db, row.server_id, port, { selfTable: 'xray_nodes', excludeNodeId: id });
 
+  const nextWsPath = b.wsPath !== undefined ? b.wsPath : row.ws_path;
   db.prepare(
     `UPDATE xray_nodes SET name=?, protocol=?, listen_port=?, enabled=?, creds_enc=?, tls_mode=?, sni=?, transport=?, ws_path=?, flow=?, outbound_type=?, landing_server_id=?, note=?
      WHERE id=?`,
@@ -228,7 +237,7 @@ export function updateXrayNode(db: DatabaseSync, id: number, b: XrayNodeUpdateIn
     tlsMode,
     sni,
     transport,
-    wsPath,
+    nextWsPath,
     flow,
     outboundType,
     landingId,

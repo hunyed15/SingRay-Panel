@@ -11,8 +11,7 @@ export type SshAuthType = 'key' | 'password';
 export type NodeProtocol =
   | 'vless'
   | 'vmess'
-  | 'trojan'
-  | 'shadowsocks'
+  | 'anytls'
   | 'hysteria'
   | 'socks'
   | 'http'
@@ -24,8 +23,7 @@ export type NodeProtocol =
 export type NodeTemplate =
   | 'vless-reality'
   | 'vmess-ws-tls'
-  | 'trojan-tls'
-  | 'ss2022'
+  | 'anytls'
   | 'hysteria'
   | 'socks'
   | 'http'
@@ -36,15 +34,14 @@ export type NodeTemplate =
 
 export type TlsMode = 'none' | 'reality' | 'tls' | 'shadowtls';
 export type OutboundType = 'direct' | 'relay';
-export type Transport = 'raw' | 'ws' | 'tcp';
+export type Transport = 'raw' | 'ws' | 'tcp' | 'xhttp';
 
-export type XrayNodeProtocol = 'vless' | 'vmess' | 'trojan' | 'shadowsocks' | 'socks' | 'http';
+export type XrayNodeProtocol = 'vless' | 'vmess' | 'socks' | 'http';
 
 export type XrayNodeTemplate =
   | 'xray-vless-reality'
   | 'xray-vmess-ws-tls'
-  | 'xray-trojan-tls'
-  | 'xray-ss'
+  | 'xray-vless-xhttp'
   | 'xray-socks'
   | 'xray-http';
 
@@ -210,6 +207,7 @@ export interface XrayNodePatch {
   landingServerId?: number;
   authUser?: string;
   authPassword?: string;
+  wsPath?: string;
 }
 
 // ---------- 节点测速 ----------
