@@ -90,7 +90,7 @@ npm ci && npm run build
 | `PANEL_APP_SECRET` | 字段加密密钥，`openssl rand -hex 32`（可与 JWT 不同；一旦变更，已加密的凭据需要重新录入）|
 | `PANEL_ADMIN_USER` / `PANEL_ADMIN_PASSWORD` | 初始管理员（仅首次创建时使用）；口令留空 = 随机生成并打印一次 |
 
-可选变量：`PANEL_BACKUP_DIR`（备份目录，空 = 数据库同目录 `backups/`）、`PANEL_BACKUP_RETENTION`（保留份数，默认 14）、`PANEL_BACKUP_HOUR`（每日备份小时，默认 4）、`PANEL_HEALTH_INTERVAL`（健康检查间隔分钟，默认 5）、`PANEL_CF_TOKEN`（Cloudflare Token → 证书走 DNS-01）、`TG_BOT_TOKEN` / `TG_CHAT_ID`（告警）、`PANEL_ENV_FILE`（自定义 .env 路径）、`SINGBOX_VERSION` / `XRAY_VERSION`（缺省 `latest`）。
+可选变量：`PANEL_BACKUP_DIR`（备份目录，空 = 数据库同目录 `backups/`）、`PANEL_BACKUP_RETENTION`（保留份数，默认 14）、`PANEL_BACKUP_HOUR`（每日备份小时，默认 4）、`PANEL_HEALTH_INTERVAL`（健康检查间隔分钟，默认 5）、`PANEL_TRUST_PROXY`（反代部署设为 1，按 X-Forwarded-For 取真实客户端 IP；直连不要开）、`PANEL_CF_TOKEN`（Cloudflare Token → 证书走 DNS-01）、`TG_BOT_TOKEN` / `TG_CHAT_ID`（告警）、`PANEL_ENV_FILE`（自定义 .env 路径）、`SINGBOX_VERSION` / `XRAY_VERSION`（缺省 `latest`）。
 
 2. **systemd**（`EnvironmentFile` 指向上面的 env 文件）：
 

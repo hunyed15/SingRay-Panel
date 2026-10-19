@@ -10,6 +10,8 @@ export interface UserRow {
   username: string;
   password_hash: string;
   created_at: string;
+  /** 会话版本:改密码 +1,旧 JWT 立即失效 */
+  token_version: number;
 }
 
 export function hashPassword(plain: string): Promise<string> {
@@ -86,7 +88,9 @@ export async function updateAccount(db: DatabaseSync, userId: number, b: Account
   if (b.newPassword !== undefined && String(b.newPassword) !== '') {
     const pw = String(b.newPassword);
     if (pw.length < 6) throw new HttpError(400, '新密码至少 6 位');
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(pw), row.id);
+    // 改密码同时递增 token_version:已签发的旧 JWT 立刻失效(否则旧 token 还能用满 12h)
+    db.prepare('UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?')
+      .run(await hashPassword(pw), row.id);
   }
   if (nextUsername !== row.username) {
     db.prepare('UPDATE users SET username = ? WHERE id = ?').run(nextUsername, row.id);

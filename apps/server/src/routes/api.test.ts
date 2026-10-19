@@ -239,5 +239,16 @@ describe('api integration (fastify.inject)', () => {
 
     const relogin = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'admin', password: 'newpass123' } });
     expect(relogin.statusCode).toBe(200);
+
+    // 改密码后旧 token 立即失效(旧实现改完密码还能用满 12 小时)
+    const stale = await app.inject({ method: 'GET', url: '/api/auth/me', headers: auth });
+    expect(stale.statusCode).toBe(401);
+
+    const fresh = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { authorization: `Bearer ${relogin.json().token}` },
+    });
+    expect(fresh.statusCode).toBe(200);
   });
 });

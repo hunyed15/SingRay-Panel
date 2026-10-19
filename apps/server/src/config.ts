@@ -23,6 +23,10 @@ const RAW_DB = process.env.PANEL_DB ?? './data/panel.db';
 export const config = {
   host: process.env.PANEL_HOST ?? '127.0.0.1',
   port: Number(process.env.PANEL_PORT ?? 3000),
+  // 反向代理后(nginx/caddy):开了才会按 X-Forwarded-For 取真实客户端 IP,
+  // 否则限流会把所有请求算成 127.0.0.1 —— 攻击者 10 次/分就能锁死管理员登录。
+  // 直连部署保持关闭(否则客户端可以伪造 XFF 绕过限流)。
+  trustProxy: process.env.PANEL_TRUST_PROXY === '1',
   // ':memory:' 哨兵直传(测试用),其余路径基于 server 包目录解析
   dbPath: RAW_DB === ':memory:' ? RAW_DB : path.resolve(DIR, '../..', RAW_DB),
   jwtSecret: process.env.PANEL_JWT_SECRET ?? 'dev-only-change-me',

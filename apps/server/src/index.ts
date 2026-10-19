@@ -36,7 +36,7 @@ const VERSION = '0.1.0';
 const PUBLIC_API_PATHS = new Set(['/api/auth/login']);
 
 export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
-  const app = Fastify({ logger: opts.logger ?? true });
+  const app = Fastify({ logger: opts.logger ?? true, trustProxy: config.trustProxy });
 
   await app.register(jwt, { secret: config.jwtSecret });
   await app.register(rateLimit, { global: false });
@@ -67,6 +67,11 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     if (!routePath.startsWith('/api') || PUBLIC_API_PATHS.has(routePath)) return;
     try {
       await req.jwtVerify();
+      // 会话版本校验:改密码后 token_version 已递增,旧 token 立刻失效
+      const u = getDb().prepare('SELECT token_version FROM users WHERE id = ?').get(req.user.sub) as
+        | { token_version: number }
+        | undefined;
+      if (!u || u.token_version !== req.user.v) return reply.code(401).send({ error: 'unauthorized' });
     } catch {
       return reply.code(401).send({ error: 'unauthorized' });
     }
