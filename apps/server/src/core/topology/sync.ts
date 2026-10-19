@@ -37,7 +37,11 @@ async function removeRule(
  * 同步拓扑:计算期望 → 删除多余 auto 规则 → 创建缺失规则(含机器侧应用)。
  * 幂等:重复调用无副作用。
  */
-export async function syncTopology(db: DatabaseSync): Promise<SyncResult> {
+export async function syncTopology(
+  db: DatabaseSync,
+  /** 注入点:测试传桩函数,生产用真实 applyForward */
+  apply: typeof applyForward = applyForward,
+): Promise<SyncResult> {
   const machines = loadMachines(db);
   const nodes = loadRelayableNodes(db);
   const desired = planTopology(machines, nodes).rules;
@@ -50,25 +54,28 @@ export async function syncTopology(db: DatabaseSync): Promise<SyncResult> {
     db.prepare('DELETE FROM port_forwards WHERE id = ?').run(r.id);
   }
 
-  // 2. 创建缺失规则:先落库拿真实 id(标签用),再应用机器侧
+  // 2. 创建缺失规则:先落库拿真实 id(标签用),再应用机器侧。
+  // INSERT 必须一起兜住:撞 (entry_server_id, entry_port) 的 UNIQUE 若抛出去,
+  // 整轮同步中断、recordRun 永远执行不到,而 trigger 只是空 catch。
   let applied = 0;
   for (const d of toCreate) {
-    const info = db
-      .prepare(
-        `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, include_in_sub, auto, core, note)
-         VALUES (?,?,?,?,?,?,?,?,?,1,?,?)`,
-      )
-      .run(d.name, d.entryServerId, d.landingServerId, d.targetNodeType, d.targetNodeId, d.entryPort, d.targetPort, d.mechanism, d.includeInSub ? 1 : 0, d.core, d.via ? `自动中转(${d.via})` : '自动中转');
-    const rowId = Number(info.lastInsertRowid);
+    let rowId = 0;
     try {
+      const info = db
+        .prepare(
+          `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, include_in_sub, auto, core, note)
+           VALUES (?,?,?,?,?,?,?,?,?,1,?,?)`,
+        )
+        .run(d.name, d.entryServerId, d.landingServerId, d.targetNodeType, d.targetNodeId, d.entryPort, d.targetPort, d.mechanism, d.includeInSub ? 1 : 0, d.core, d.via ? `自动中转(${d.via})` : '自动中转');
+      rowId = Number(info.lastInsertRowid);
       const landing = db.prepare('SELECT host, client_host FROM servers WHERE id = ?').get(d.landingServerId) as Row;
       const conn = serverConn(db, d.entryServerId);
       const landingHost = landing.client_host || landing.host;
-      await applyForward(conn, { id: rowId, entryPort: d.entryPort, landingHost, targetPort: d.targetPort, mechanism: d.mechanism }, false);
+      await apply(conn, { id: rowId, entryPort: d.entryPort, landingHost, targetPort: d.targetPort, mechanism: d.mechanism }, false);
       applied++;
     } catch (err) {
       errors.push(`${d.name}: ${(err as Error).message.slice(0, 100)}`);
-      db.prepare('DELETE FROM port_forwards WHERE id = ?').run(rowId); // 应用失败回删记录
+      if (rowId) db.prepare('DELETE FROM port_forwards WHERE id = ?').run(rowId); // 应用失败回删记录
     }
   }
 

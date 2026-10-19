@@ -22,6 +22,25 @@ const byId = (id: number) => machines.find((m) => m.id === id)!;
 /** 只关心规则时用这个(完整结果还含白名单跳过说明) */
 const planRules = (m: MachineRef[], n: NodeRef[]) => planTopology(m, n).rules;
 
+describe('topology: 端口键与 DB UNIQUE(entry_server_id, entry_port) 同口径', () => {
+  it('同一入口机同一端口上的两个节点:只出一条规则,另一条给出可见原因', () => {
+    const ms: MachineRef[] = [
+      M({ id: 1, name: 'R', role: 'relay', ipStack: 'v4', host: '1.1.1.1' }),
+      M({ id: 2, name: 'L1', role: 'landing', ipStack: 'v4', host: '2.2.2.2' }),
+      M({ id: 3, name: 'L2', role: 'landing', ipStack: 'v4', host: '3.3.3.3' }),
+    ];
+    const ns: NodeRef[] = [
+      { id: 1, name: 'n1', type: 'singbox', serverId: 2, port: 31001 },
+      { id: 2, name: 'n2', type: 'singbox', serverId: 3, port: 31001 },
+    ];
+    const r = planTopology(ms, ns);
+    expect(r.rules).toHaveLength(1);
+    expect(r.skipped).toHaveLength(1);
+    expect(r.skipped[0].reason).toContain('31001');
+    expect(r.skipped[0].reason).toContain('不能复用');
+  });
+});
+
 describe('topology: reachability', () => {
   it('hostFamily detects v4/v6 literal', () => {
     expect(hostFamily('1.2.3.4')).toBe('v4');

@@ -3,6 +3,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import { syncTopology, type SyncResult } from './sync.js';
+import { recordRun } from '../alerts.js';
 
 let timer: NodeJS.Timeout | null = null;
 let running = false;
@@ -28,8 +29,10 @@ async function runSync(): Promise<void> {
   try {
     const r = await syncTopology(db);
     for (const l of listeners) l(r);
-  } catch {
-    // 失败已记录在 job_runs
+  } catch (err) {
+    // syncTopology 内部已按条记账;这里兜住"计划/落库阶段"抛出的异常 ——
+    // 否则一次失败后每次重试都静默失败,运维卡片永远不亮。
+    recordRun(db, 'topology', false, (err as Error).message.slice(0, 200));
   } finally {
     running = false;
     if (pendingDb) requestTopologySync(pendingDb); // 期间又有变更 → 再跑一轮

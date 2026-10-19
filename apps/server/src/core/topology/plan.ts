@@ -141,11 +141,26 @@ export function planTopology(
   const skipKeys = new Set<string>();
 
   const add = (r: DesiredRule) => {
-    // key 与 diffRules / DB 的 UNIQUE(entry_server_id, entry_port) 保持同一口径。
-    // 端口全局唯一(services/ports.ts globallyUsedPorts),因此同一 (入口,端口,落地,目标端口)
-    // 不可能对应两条不同类型的规则;若改用更细的 key,反而会生成 diffRules 无法区分的重复行。
-    const key = `${r.entryServerId}|${r.entryPort}|${r.landingServerId}|${r.targetPort}`;
-    if (!rules.has(key)) rules.set(key, r);
+    // key 必须与 DB 的 UNIQUE(entry_server_id, entry_port) 同口径:
+    // 同一入口机的一个端口只能承载一条规则。用更细的 key(带落地/目标端口)会生成
+    // 插不进去的重复行 —— 整轮同步在 INSERT 处抛错并被 trigger 吞掉。
+    const key = `${r.entryServerId}|${r.entryPort}`;
+    const taken = rules.get(key);
+    if (taken) {
+      const name = byId.get(r.entryServerId)?.name ?? `#${r.entryServerId}`;
+      skipped.push({
+        nodeId: r.targetNodeId,
+        nodeName: r.name,
+        port: r.entryPort,
+        relayServerId: r.entryServerId,
+        relayName: name,
+        machineId: r.entryServerId,
+        machineName: name,
+        reason: `入口端口 ${r.entryPort} 已被规则「${taken.name}」占用(同一入口机的端口不能复用,手工规则优先)`,
+      });
+      return;
+    }
+    rules.set(key, r);
   };
 
   /** 链路上除落地机外的每一跳都要能监听该端口(落地机上的节点端口是既成事实) */
