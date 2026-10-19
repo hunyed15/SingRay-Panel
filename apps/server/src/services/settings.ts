@@ -1,18 +1,48 @@
-// 面板设置(KV):目前只有订阅 slug(移植自旧 routes/settings.js + db.js get/setSetting)
+// 面板设置(KV):订阅 slug、Reality 地址策略、Cloudflare/Telegram 令牌
 import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from './errors.js';
 import { genRandomHex } from '../core/crypto.js';
+import { encryptSecret, decryptSecret } from './creds.js';
 import { config } from '../config.js';
+
+const CF_TOKEN_KEY = 'cf_token';
+const TG_BOT_TOKEN_KEY = 'tg_bot_token';
+const TG_CHAT_ID_KEY = 'tg_chat_id';
+
+/**
+ * 落库时加密的键:令牌会被备份带走,明文等于备份里有明文凭据。
+ * 用 appSecret 加密(与节点凭据同一把钥匙);更换 APP_SECRET 后需要重新录入。
+ */
+const SECRET_KEYS = new Set([CF_TOKEN_KEY, TG_BOT_TOKEN_KEY]);
+const ENC_PREFIX = 'enc:';
+
+function decode(key: string, value: string): string {
+  if (!SECRET_KEYS.has(key) || !value.startsWith(ENC_PREFIX)) return value;
+  try {
+    return decryptSecret(value.slice(ENC_PREFIX.length));
+  } catch {
+    // APP_SECRET 换过 → 解不开;当作未配置,但保留密文不覆盖(换回旧密钥还能救)
+    return '';
+  }
+}
 
 export function getSetting(db: DatabaseSync, key: string): string | null {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
-  return row?.value ?? null;
+  const value = row?.value ?? null;
+  if (value === null) return null;
+  const plain = decode(key, value);
+  // 旧数据是明文:读到时顺手加密回写(不需要迁移脚本)
+  if (SECRET_KEYS.has(key) && value && !value.startsWith(ENC_PREFIX)) {
+    setSetting(db, key, plain);
+  }
+  return plain;
 }
 
 export function setSetting(db: DatabaseSync, key: string, value: string): void {
+  const stored = SECRET_KEYS.has(key) && value ? `${ENC_PREFIX}${encryptSecret(value)}` : value;
   db.prepare(
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-  ).run(key, value);
+  ).run(key, stored);
 }
 
 export interface PanelSettings {
@@ -28,10 +58,6 @@ export interface PanelSettings {
   tgBotTokenSet: boolean;
   tgChatId: string;
 }
-
-const CF_TOKEN_KEY = 'cf_token';
-const TG_BOT_TOKEN_KEY = 'tg_bot_token';
-const TG_CHAT_ID_KEY = 'tg_chat_id';
 
 /** DNS-01 Token:DB 优先,env(PANEL_CF_TOKEN)兜底 */
 export function resolveCfToken(db: DatabaseSync): string {
