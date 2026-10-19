@@ -54,17 +54,17 @@ describe('servers service', () => {
     };
     expect(rs.reality_public_key).toBeTruthy();
     // 私钥加密存储,可解回
-    expect(decrypt(config.jwtSecret, rs.reality_private_key)).toBeTruthy();
+    expect(decrypt(config.appSecret, rs.reality_private_key)).toBeTruthy();
     expect(rs.short_id).toMatch(/^[0-9a-f]{16}$/);
     const ls = db.prepare('SELECT * FROM landing_settings WHERE server_id = ?').get(landing.id) as unknown as { in_port: number; password: string };
     expect(ls.in_port).toBe(32000 + landing.id);
-    expect(decrypt(config.jwtSecret, ls.password)).toMatch(/^[A-Za-z0-9+/]{22}==$/);
+    expect(decrypt(config.appSecret, ls.password)).toMatch(/^[A-Za-z0-9+/]{22}==$/);
   });
 
   it('ssh_auth_secret is encrypted at rest', () => {
     const raw = db.prepare('SELECT ssh_auth_secret FROM servers WHERE id = ?').get(relay.id) as unknown as { ssh_auth_secret: string };
     expect(raw.ssh_auth_secret).not.toContain('ssh-key-abc');
-    expect(decrypt(config.jwtSecret, raw.ssh_auth_secret)).toBe('ssh-key-abc');
+    expect(decrypt(config.appSecret, raw.ssh_auth_secret)).toBe('ssh-key-abc');
   });
 
   it('role change rebuilds role settings', () => {
@@ -228,12 +228,12 @@ describe('xray nodes service', () => {
 describe('legacy ciphertext compatibility', () => {
   it('decrypts old-format token (iv.body+tag layout)', () => {
     // 旧库 crypto.js 的同构格式:base64(iv).base64(body|tag),此处手动构造验证可解
-    const key = nodeCrypto.createHash('sha256').update(config.jwtSecret, 'utf8').digest();
+    const key = nodeCrypto.createHash('sha256').update(config.appSecret, 'utf8').digest();
     const iv = nodeCrypto.randomBytes(12);
     const cipher = nodeCrypto.createCipheriv('aes-256-gcm', key, iv);
     const body = Buffer.concat([cipher.update('legacy-secret', 'utf8'), cipher.final()]);
     const legacy = `${iv.toString('base64')}.${Buffer.concat([body, cipher.getAuthTag()]).toString('base64')}`;
-    expect(decrypt(config.jwtSecret, legacy)).toBe('legacy-secret');
-    expect(encrypt(config.jwtSecret, 'legacy-secret')).not.toBe(legacy); // 新写仍加密,格式不变
+    expect(decrypt(config.appSecret, legacy)).toBe('legacy-secret');
+    expect(encrypt(config.appSecret, 'legacy-secret')).not.toBe(legacy); // 新写仍加密,格式不变
   });
 });

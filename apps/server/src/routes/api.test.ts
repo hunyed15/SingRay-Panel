@@ -6,7 +6,8 @@ import type { FastifyInstance } from 'fastify';
 vi.hoisted(() => {
   process.env.PANEL_DB = ':memory:';
   process.env.PANEL_JWT_SECRET = 'test-jwt-secret';
-  delete process.env.PANEL_ADMIN_PASSWORD; // 用默认 admin/admin888
+  // 管理员口令必须显式配置:面板不再使用固定默认口令 admin888(未配置时随机生成并打印)
+  process.env.PANEL_ADMIN_PASSWORD = 'admin888';
 });
 
 const { buildApp } = await import('../index.js');

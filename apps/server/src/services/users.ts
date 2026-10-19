@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
 import { HttpError } from './errors.js';
 import { getSetting, setSetting } from './settings.js';
-import { genRandomHex } from '../core/crypto.js';
+import { genPassword, genRandomHex } from '../core/crypto.js';
 
 export interface UserRow {
   id: number;
@@ -36,19 +36,30 @@ export function ensureAdmin(db: DatabaseSync, admin: { username: string; passwor
   );
 }
 
-/** 启动时引导:users 表为空才创建(仅首次,PANEL_ADMIN_USER/PANEL_ADMIN_PASSWORD 或默认 admin/admin888);顺带生成订阅 slug */
-export async function bootstrapAdmin(db: DatabaseSync): Promise<void> {
+/**
+ * 启动时引导:users 表为空才创建(仅首次)+ 顺带生成订阅 slug。
+ *
+ * 口令策略:不再使用固定默认口令 `admin888`(公网实例被扫到即失守)。
+ * 未配置 PANEL_ADMIN_PASSWORD 时随机生成 16 位口令并**只打印这一次**,
+ * 返回给调用方以便日志/测试断言;配置了则原样使用(用户显式选择)。
+ */
+export async function bootstrapAdmin(db: DatabaseSync): Promise<{ generatedPassword?: string }> {
+  let generatedPassword: string | undefined;
   const existing = db.prepare('SELECT id FROM users LIMIT 1').get();
   if (!existing) {
     const username = process.env.PANEL_ADMIN_USER || 'admin';
-    const password = process.env.PANEL_ADMIN_PASSWORD || 'admin888';
+    const fromEnv = process.env.PANEL_ADMIN_PASSWORD;
+    const password = fromEnv || genPassword(16);
+    if (!fromEnv) generatedPassword = password;
     const passwordHash = await hashPassword(password);
     ensureAdmin(db, { username, passwordHash });
-    if (!process.env.PANEL_ADMIN_PASSWORD) {
-      console.log(`[bootstrap] admin: ${username}  password: ${password}`);
+    if (generatedPassword) {
+      console.log(`[bootstrap] admin: ${username}  password: ${generatedPassword}`);
+      console.log('[bootstrap] 这是随机生成的口令,只打印这一次;请登录后立即修改');
     }
   }
   if (!getSetting(db, 'sub_slug')) setSetting(db, 'sub_slug', genRandomHex(6));
+  return { generatedPassword };
 }
 
 export interface AccountUpdateInput {

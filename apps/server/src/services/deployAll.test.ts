@@ -8,7 +8,7 @@ import { config } from '../config.js';
 function seedDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   migrate(db);
-  const enc = (s: string) => encrypt(config.jwtSecret, s);
+  const enc = (s: string) => encrypt(config.appSecret, s);
   db.prepare("INSERT INTO servers (id, name, role, host, ssh_sudo, control, ssh_auth_secret) VALUES (1, 'corenet', 'relay', '10.0.0.1', 0, 'ssh', ?)").run(enc('fake-key-1'));
   db.prepare("INSERT INTO servers (id, name, role, host, control, ssh_auth_secret) VALUES (2, 'landing', 'landing', '10.0.0.2', 'ssh', ?)").run(enc('fake-key-2'));
   db.prepare("INSERT INTO servers (id, name, role, host, control) VALUES (3, 'agentbox', 'relay', '10.0.0.3', 'agent')").run();

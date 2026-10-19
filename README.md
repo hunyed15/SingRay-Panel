@@ -62,12 +62,15 @@ tools/migrate   SQLite 迁移工具（行数对账报告）
 git clone https://github.com/hunyed115/SingRay-Panel.git
 cd SingRayPanel
 npm install
-cp .env.example .env    # 修改密钥
-npm run dev             # server(3000) + web(5173)
+cp .env.example .env    # 必须把两个密钥改成真实随机值,否则拒绝启动
+npm run dev             # server(3000) + web(5173);会自动加载仓库根的 .env
 npm test                # vitest 全量(含 golden 快照)
 ```
 
-首次启动自动创建管理员（`PANEL_ADMIN_USER` / `PANEL_ADMIN_PASSWORD`，默认 admin/admin888，请立即修改）。
+`.env` 会被服务端自动加载（已存在的环境变量优先，等价于 systemd `EnvironmentFile` 的行为）。
+`PANEL_JWT_SECRET` / `PANEL_APP_SECRET` 仍是默认值或 `.env.example` 的占位符时，**进程直接拒绝启动**——这条守卫与监听地址无关（nginx 反代到 `127.0.0.1` 同样要求），因为用默认串可以离线伪造管理员令牌。
+
+首次启动自动创建管理员。`PANEL_ADMIN_PASSWORD` **留空则随机生成 16 位口令并只打印一次**（不再有 `admin888` 这类默认口令，登录后请立即修改）。
 
 ### 生产部署
 
@@ -80,11 +83,13 @@ npm ci && npm run build
 | 变量 | 说明 |
 |------|------|
 | `PANEL_DB` | SQLite 路径（默认 `./data/panel.db`）|
-| `PANEL_HOST` | 监听地址；`0.0.0.0` 时必须配置下方两个密钥（否则拒绝启动）|
+| `PANEL_HOST` | 监听地址（默认 `127.0.0.1`；反代部署保持默认即可）|
 | `PANEL_PORT` | 监听端口（默认 3000）|
-| `PANEL_JWT_SECRET` | 登录令牌密钥，`openssl rand -hex 32` |
-| `PANEL_APP_SECRET` | 字段加密密钥，与 JWT 可不同，`openssl rand -hex 32` |
-| `PANEL_ADMIN_USER` / `PANEL_ADMIN_PASSWORD` | 初始管理员（仅首次创建时使用）|
+| `PANEL_JWT_SECRET` | 登录令牌密钥，`openssl rand -hex 32`；**默认值/示例占位符一律拒绝启动** |
+| `PANEL_APP_SECRET` | 字段加密密钥，`openssl rand -hex 32`（可与 JWT 不同；一旦变更，已加密的凭据需要重新录入）|
+| `PANEL_ADMIN_USER` / `PANEL_ADMIN_PASSWORD` | 初始管理员（仅首次创建时使用）；口令留空 = 随机生成并打印一次 |
+
+可选变量：`PANEL_BACKUP_DIR`（备份目录，空 = 数据库同目录 `backups/`）、`PANEL_BACKUP_RETENTION`（保留份数，默认 14）、`PANEL_BACKUP_HOUR`（每日备份小时，默认 4）、`PANEL_HEALTH_INTERVAL`（健康检查间隔分钟，默认 5）、`PANEL_CF_TOKEN`（Cloudflare Token → 证书走 DNS-01）、`TG_BOT_TOKEN` / `TG_CHAT_ID`（告警）、`PANEL_ENV_FILE`（自定义 .env 路径）、`SINGBOX_VERSION` / `XRAY_VERSION`（缺省 `latest`）。
 
 2. **systemd**（`EnvironmentFile` 指向上面的 env 文件）：
 
