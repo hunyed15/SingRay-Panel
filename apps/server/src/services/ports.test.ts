@@ -6,6 +6,7 @@ import {
   serverPortRanges,
   isPortAllowedOnServer,
   assertPortAllowedOnServer,
+  assertPortFree,
   pickPortFromRanges,
   pickPortDerived,
   describePortHolders,
@@ -93,6 +94,26 @@ describe('ports: allocation inside the whitelist', () => {
     const port = allocatePortForServer(db, 1);
     expect(port).toBeGreaterThanOrEqual(20000);
     expect(port).toBeLessThanOrEqual(65000);
+    db.close();
+  });
+
+  it('1-65535 视为不限制:不会从端口 1 开始分配', () => {
+    const db = makeDb('1-65535');
+    expect(serverPortRanges(db, 1)).toEqual([]);
+    const port = allocatePortForServer(db, 1);
+    expect(port).toBeGreaterThanOrEqual(20000); // 旧实现会分到端口 1
+    db.close();
+  });
+
+  it('同机节点端口被中转规则的入口端口占用 → 409', () => {
+    const db = makeDb('');
+    db.prepare("INSERT INTO servers (name, host, role) VALUES ('L','1.2.3.4','landing')").run();
+    db.prepare(
+      `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism)
+       VALUES ('r', 1, 2, 'port', 0, 30011, 443, 'socat')`,
+    ).run();
+    expect(() => assertPortFree(db, 1, 30011)).toThrow(/中转规则占用/);
+    expect(() => assertPortFree(db, 1, 30012)).not.toThrow();
     db.close();
   });
 

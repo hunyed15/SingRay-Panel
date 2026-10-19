@@ -17,6 +17,22 @@ function recordingExec(responses: Record<string, string> = {}) {
   return { calls, execFn };
 }
 
+describe('forward: preflight', () => {
+  it('入口端口未定(<=0)时跳过占用检查 —— NAT 机器留空自动分配是主路径', async () => {
+    const { calls, execFn } = recordingExec();
+    const r = await preflight(conn, 0, execFn);
+    expect(calls.some((c) => c.cmd.includes('ss -tln'))).toBe(false);
+    expect(r.entryPortBusy).toBe(false);
+  });
+
+  it('指定端口时照常检查占用', async () => {
+    const { calls, execFn } = recordingExec({ 'ss -tln': 'BUSY\n' });
+    const r = await preflight(conn, 31001, execFn);
+    expect(calls.some((c) => c.cmd.includes("':31001 '"))).toBe(true);
+    expect(r.entryPortBusy).toBe(true);
+  });
+});
+
 describe('forward: 对账修复原语', () => {
   it('removeSocatUnit 停用并删除 unit', async () => {
     const { calls, execFn } = recordingExec();

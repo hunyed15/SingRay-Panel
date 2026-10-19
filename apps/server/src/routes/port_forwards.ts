@@ -6,7 +6,7 @@ import { HttpError } from '../services/errors.js';
 import { decrypt } from '../core/crypto.js';
 import { config } from '../config.js';
 import { preflight, applyForward, reconcile, removeIptablesLine, removeSocatUnit } from '../core/forward/index.js';
-import { assertPortAllowedOnServer, allocatePortForServer } from '../services/ports.js';
+import { assertPortAllowedOnServer, assertPortFree, allocatePortForServer } from '../services/ports.js';
 import { planBatchForward, executeBatchForward } from '../services/forwardBatch.js';
 import { deleteForward } from '../services/portForwards.js';
 import { withServerLock } from '../services/locks.js';
@@ -69,10 +69,11 @@ export default async function portForwardRoutes(app: FastifyInstance): Promise<v
   /** 新建向导预检:入口机 iptables/ip_forward/端口占用(决定机制选择) */
   app.post('/preflight', async (req) => {
     const db = getDb();
-    const b = z.object({ entryServerId: z.coerce.number().int(), entryPort: z.coerce.number().int() }).parse(req.body);
+    // entryPort 可省略(NAT 机器留空自动分配)—— 旧 schema 强制必填,导致主路径恒 400 且被前端静默吞掉
+    const b = z.object({ entryServerId: z.coerce.number().int(), entryPort: z.coerce.number().int().optional() }).parse(req.body);
     const entry = getServer(db, b.entryServerId);
     const conn = serverConn(db, entry.id);
-    return preflight(conn, b.entryPort);
+    return preflight(conn, b.entryPort ?? 0);
   });
 
   app.post('/', async (req) => {
@@ -94,6 +95,7 @@ export default async function portForwardRoutes(app: FastifyInstance): Promise<v
     if (b.entryPort) {
       port = Number(b.entryPort);
       assertPortAllowedOnServer(db, b.entryServerId, port, '入口机');
+      assertPortFree(db, b.entryServerId, port); // 同机节点占用该端口 → iptables 会截走节点流量
       if (db.prepare('SELECT id FROM port_forwards WHERE entry_server_id = ? AND entry_port = ?').get(b.entryServerId, port)) {
         throw new HttpError(409, `入口端口 ${port} 已被其他转发规则占用`);
       }

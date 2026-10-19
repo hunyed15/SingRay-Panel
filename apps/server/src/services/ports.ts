@@ -2,7 +2,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { HttpError } from './errors.js';
-import { parsePortAllow, containsPort, describePortRanges, expandRanges, type PortRange } from './portAllow.js';
+import { parsePortAllow, containsPort, describePortRanges, expandRanges, portAllowCount, type PortRange } from './portAllow.js';
 
 /** 随机/派生分配的范围 */
 const PORT_MIN = 20000;
@@ -92,6 +92,12 @@ export function assertPortFree(
       .get(serverId, port, exclude);
     if (row) throw new HttpError(409, `端口 ${port} 已被该机器上其他节点占用`);
   }
+  // 该机的转发规则入口端口:iptables DNAT 会把这个端口上的流量整段截走,
+  // 节点与入口端口同号 = 节点流量被静默改道
+  const rule = db
+    .prepare('SELECT id FROM port_forwards WHERE entry_server_id = ? AND entry_port = ?')
+    .get(serverId, port) as { id: number } | undefined;
+  if (rule) throw new HttpError(409, `端口 ${port} 已被该机器上的中转规则占用(入口端口)`);
 }
 
 /**
@@ -119,7 +125,9 @@ export function serverPortRanges(db: DatabaseSync, serverId: number): PortRange[
   const row = db.prepare('SELECT port_allow FROM servers WHERE id = ?').get(serverId) as
     | { port_allow: string }
     | undefined;
-  return parsePortAllow(row?.port_allow ?? '').ranges;
+  const ranges = parsePortAllow(row?.port_allow ?? '').ranges;
+  // 填 `1-65535` 的本意是"不限制":按白名单走会从端口 1 开始分配,还把 AVOID 黑名单整体旁路
+  return portAllowCount(ranges) >= 60000 ? [] : ranges;
 }
 
 export function isPortAllowedOnServer(db: DatabaseSync, serverId: number, port: number): boolean {

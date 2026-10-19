@@ -270,3 +270,42 @@ describe('forward batch: 端口用尽文案(P1-15)', () => {
     f.db.close();
   });
 });
+
+describe('forward batch: 落库失败不整批抛穿(F-01)', () => {
+  it('INSERT 抛错 → 记入 errors,其余条目继续,不留半截行', async () => {
+    const f = fixture();
+    // 模拟并发抢到同一 (entry, port):第二条 INSERT 直接 ABORT
+    f.db.exec(
+      `CREATE TRIGGER boom BEFORE INSERT ON port_forwards WHEN NEW.entry_port = 32680
+       BEGIN SELECT RAISE(ABORT, 'UNIQUE race'); END;`,
+    );
+    const applied: number[] = [];
+    const r = await executeBatchForward(
+      f.db,
+      {
+        entryServerIds: [f.natEntry],
+        targets: [{ type: 'singbox', id: 1 }, { type: 'singbox', id: 2 }, { type: 'xray', id: 1 }],
+      },
+      async (_c, spec) => {
+        applied.push(spec.entryPort);
+      },
+    );
+    expect(r.created).toHaveLength(2);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].message).toContain('UNIQUE race');
+    expect(applied).toEqual([32679, 32681]); // 失败那条没有下发
+    expect((f.db.prepare('SELECT COUNT(*) c FROM port_forwards').get() as { c: number }).c).toBe(2);
+    f.db.close();
+  });
+});
+
+describe('forward batch: 总量闸门(F-04)', () => {
+  it('计划超过 50 条直接 400,而不是挂几个小时', () => {
+    const f = fixture();
+    const stmt = f.db.prepare("INSERT INTO nodes (name, server_id, protocol, listen_port) VALUES (?, ?, 'vless', ?)");
+    for (let i = 0; i < 60; i++) stmt.run(`bulk-${i}`, f.landing, 21000 + i);
+    const targets = Array.from({ length: 60 }, (_, i) => ({ type: 'singbox' as const, id: i + 7 }));
+    expect(() => planBatchForward(f.db, { entryServerIds: [f.freeEntry], targets })).toThrow(/一次最多创建 50 条/);
+    f.db.close();
+  });
+});

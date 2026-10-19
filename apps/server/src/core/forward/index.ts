@@ -53,12 +53,15 @@ export async function preflight(conn: SshConn, entryPort: number, execFn: ExecFn
   }
 
   let entryPortBusy = false;
-  try {
-    const r = await execFn(conn, `ss -tln 2>/dev/null | grep -q ':${entryPort} ' && echo BUSY || echo FREE`, { timeoutClass: 'quick' });
-    entryPortBusy = r.stdout.trim() === 'BUSY';
-    if (entryPortBusy) issues.push(`入口端口 ${entryPort} 已被占用`);
-  } catch {
-    // ss 不可用时跳过占用检查,不视为硬错误
+  // entryPort <= 0 = 还没定端口(NAT 机器留空自动分配):跳过占用检查
+  if (entryPort > 0) {
+    try {
+      const r = await execFn(conn, `ss -tln 2>/dev/null | grep -q ':${entryPort} ' && echo BUSY || echo FREE`, { timeoutClass: 'quick' });
+      entryPortBusy = r.stdout.trim() === 'BUSY';
+      if (entryPortBusy) issues.push(`入口端口 ${entryPort} 已被占用`);
+    } catch {
+      // ss 不可用时跳过占用检查,不视为硬错误
+    }
   }
 
   return { iptablesAvailable, socatAvailable, ipForward, entryPortBusy, issues };

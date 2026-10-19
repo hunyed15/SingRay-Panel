@@ -25,6 +25,9 @@ import type { Row } from './row.js';
 export type BatchCore = 'singbox' | 'xray';
 export type ForwardMechanism = 'iptables' | 'socat';
 
+/** 单次「一键添加」的上限(逐条串行 SSH,按 50 条一批比较安全) */
+const MAX_BATCH_CREATE = 50;
+
 export interface BatchTarget {
   type: BatchCore;
   id: number;
@@ -204,9 +207,19 @@ export function planBatchForward(db: DatabaseSync, input: BatchInput): BatchPlan
     }
   }
 
+  const createCount = items.filter((i) => i.action === 'create').length;
+  // 逐条串行 SSH:不设闸门时 50 台 × 500 节点 = 上万条,单个请求能跑几个小时,
+  // 前端超时后服务端还在继续下发,现场完全不可解释。
+  if (createCount > MAX_BATCH_CREATE) {
+    throw new HttpError(
+      400,
+      `一次最多创建 ${MAX_BATCH_CREATE} 条,当前计划 ${createCount} 条 —— 请减少入口机或落地节点后分批执行`,
+    );
+  }
+
   return {
     items,
-    createCount: items.filter((i) => i.action === 'create').length,
+    createCount,
     skipCount: items.filter((i) => i.action === 'skip').length,
   };
 }
@@ -231,26 +244,29 @@ export async function executeBatchForward(
 
   for (const item of plan.items) {
     if (item.action !== 'create' || item.entryPort === null) continue;
-    const info = db
-      .prepare(
-        `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, include_in_sub, auto, core, note)
-         VALUES (?,?,?,?,?,?,?,?,?,0,?,?)`,
-      )
-      .run(
-        `${item.entryServerName}→${item.targetNodeName}`,
-        item.entryServerId,
-        item.landingServerId,
-        item.targetNodeType,
-        item.targetNodeId,
-        item.entryPort,
-        item.targetPort,
-        item.mechanism,
-        item.includeInSub ? 1 : 0,
-        item.core,
-        '一键添加',
-      );
-    const rowId = Number(info.lastInsertRowid);
+    let rowId = 0;
     try {
+      // INSERT 也必须在 try 里:撞 (entry_server_id, entry_port) 的 UNIQUE 若抛穿,
+      // 已下发的机器侧规则与已插入的行都会留场,而用户只看到 500
+      const info = db
+        .prepare(
+          `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, include_in_sub, auto, core, note)
+           VALUES (?,?,?,?,?,?,?,?,?,0,?,?)`,
+        )
+        .run(
+          `${item.entryServerName}→${item.targetNodeName}`,
+          item.entryServerId,
+          item.landingServerId,
+          item.targetNodeType,
+          item.targetNodeId,
+          item.entryPort,
+          item.targetPort,
+          item.mechanism,
+          item.includeInSub ? 1 : 0,
+          item.core,
+          '一键添加',
+        );
+      rowId = Number(info.lastInsertRowid);
       const landing = db.prepare('SELECT host, client_host FROM servers WHERE id = ?').get(item.landingServerId) as Row;
       const entryPort = item.entryPort; // 闭包里保持 number 收窄
       const entryServerId = item.entryServerId;
@@ -266,7 +282,7 @@ export async function executeBatchForward(
       );
       created.push(item);
     } catch (err) {
-      db.prepare('DELETE FROM port_forwards WHERE id = ?').run(rowId);
+      if (rowId) db.prepare('DELETE FROM port_forwards WHERE id = ?').run(rowId);
       errors.push({ key: item.key, name: `${item.entryServerName}→${item.targetNodeName}`, message: (err as Error).message });
     }
   }
