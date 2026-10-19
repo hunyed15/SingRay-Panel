@@ -19,17 +19,23 @@ export async function sendAlert(db: DatabaseSync, title: string, detail = ''): P
       body: JSON.stringify({ chat_id: tg.chatId, text: detail ? `${title}\n${detail}` : title }),
       signal: AbortSignal.timeout(10_000),
     });
-    return { delivered: res.ok };
-  } catch {
-    return { delivered: false }; // TG 网络不通(墙内)不阻断主流程,记录即可
+    if (!res.ok) {
+      // 送达失败必须留痕:旧实现无论成败都写 ok=1,运维卡片永远绿的
+      const body = await res.text().catch(() => '');
+      recordRun(db, 'alert-error', false, `Telegram ${res.status}:${body.slice(0, 200)}`);
+      return { delivered: false };
+    }
+    return { delivered: true };
+  } catch (err) {
+    recordRun(db, 'alert-error', false, (err as Error).message); // TG 网络不通(墙内)不阻断主流程
+    return { delivered: false };
   }
 }
 
-/** 保留最近 500 条运行记录 */
+/** 清理运行记录:保留 7 天,且最多 2000 条(健康检查+流量每天约 576 条,500 条不到一天) */
 export function pruneRuns(db: DatabaseSync): void {
-  db.prepare(
-    'DELETE FROM job_runs WHERE id NOT IN (SELECT id FROM job_runs ORDER BY id DESC LIMIT 500)',
-  ).run();
+  db.prepare("DELETE FROM job_runs WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ','now','-7 days')").run();
+  db.prepare('DELETE FROM job_runs WHERE id NOT IN (SELECT id FROM job_runs ORDER BY id DESC LIMIT 2000)').run();
 }
 
 export function recordRun(db: DatabaseSync, job: string, ok: boolean, detail = ''): void {
