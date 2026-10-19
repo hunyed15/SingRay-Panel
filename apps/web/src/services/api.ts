@@ -8,6 +8,9 @@ import { clearToken, getToken, setToken } from './auth';
 import type {
   AccountPatch,
   DeployAllResult,
+  ForwardBatchInput,
+  ForwardBatchPlan,
+  ForwardBatchResult,
   LoginResult,
   NodeCreateInput,
   NodeItem,
@@ -247,6 +250,14 @@ export const reconcilePortForwards = (entryServerId: number): Promise<ForwardRec
     body: { entryServerId },
   });
 
+/** 一键添加:预览(端口按白名单分配,不落库) */
+export const previewBatchPortForwards = (payload: ForwardBatchInput): Promise<ForwardBatchPlan> =>
+  request<ForwardBatchPlan>('/api/port-forwards/batch/preview', { method: 'POST', body: payload });
+
+/** 一键添加:执行(逐条下发,失败条目回滚) */
+export const createBatchPortForwards = (payload: ForwardBatchInput): Promise<ForwardBatchResult> =>
+  request<ForwardBatchResult>('/api/port-forwards/batch', { method: 'POST', body: payload });
+
 // ---------- 一键部署 ----------
 
 export interface PendingDeployRow {
@@ -387,6 +398,8 @@ export interface TopologyMachine {
   role: 'relay' | 'landing';
   ipStack: 'v4' | 'v6' | 'dual' | 'unknown';
   relayMechanism: 'iptables' | 'socat';
+  /** 可用端口白名单;空数组 = 不限制 */
+  portAllow: { start: number; end: number }[];
 }
 
 export interface TopologyRule {
@@ -404,9 +417,32 @@ export interface TopologyRule {
   includeInSub: boolean;
 }
 
+export interface TopologySkip {
+  nodeId: number;
+  nodeName: string;
+  port: number;
+  relayServerId: number;
+  relayName: string;
+  machineId: number;
+  machineName: string;
+  reason: string;
+}
+
+export interface PortAllowWarning {
+  nodeId: number;
+  nodeName: string;
+  port: number;
+  machineId: number;
+  machineName: string;
+}
+
 export interface TopologyPreview {
   machines: TopologyMachine[];
   desired: TopologyRule[];
+  /** 端口白名单挡掉的链路(不生成规则) */
+  skipped: TopologySkip[];
+  /** 存量告警:节点端口不在自己机器的白名单内(不自动改号) */
+  portAllowWarnings: PortAllowWarning[];
   diff: { toCreate: number; toDelete: number; toDeleteList: { id: number; name: string; entryPort: number }[] };
 }
 

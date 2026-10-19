@@ -77,6 +77,11 @@ export interface Server {
   relay_mechanism: 'iptables' | 'socat';
   /** 两跳中转时指定的中间跳机器(落地机用);null = 引擎自选 */
   prefer_via_server_id: number | null;
+  /**
+   * 可用端口白名单(NAT 场景),如 `32679-32699,30000`;空串 = 不限制。
+   * 约束该机的节点监听端口与作为中转入口时的入口端口。
+   */
+  port_allow: string;
 }
 
 export interface ServerInput {
@@ -99,6 +104,8 @@ export interface ServerInput {
   relayMechanism?: 'iptables' | 'socat';
   /** 两跳中转的中间跳机器(落地机用);null = 清空(引擎自选) */
   preferViaServerId?: number | null;
+  /** 可用端口白名单(NAT 场景),如 `32679-32699,30000`;空串 = 不限制 */
+  portAllow?: string;
 }
 
 export interface TestResult {
@@ -289,6 +296,51 @@ export interface PortForwardCreateInput {
   /** iptables 不可用(如无 NET_ADMIN / NAT 模块)时才选 socat */
   mechanism: ForwardMechanism;
   note?: string;
+}
+
+// ---------- 一键添加中转规则 ----------
+
+export interface ForwardBatchTarget {
+  type: 'singbox' | 'xray';
+  id: number;
+}
+
+export interface ForwardBatchInput {
+  entryServerIds: number[];
+  targets: ForwardBatchTarget[];
+  /** 不传 = 跟随各入口机自己的转发机制设置 */
+  mechanism?: ForwardMechanism;
+  includeInSub?: boolean;
+}
+
+export interface ForwardBatchItem {
+  key: string;
+  entryServerId: number;
+  entryServerName: string;
+  entryPort: number | null;
+  landingServerId: number;
+  landingServerName: string;
+  targetNodeType: 'singbox' | 'xray';
+  targetNodeId: number;
+  targetNodeName: string;
+  targetPort: number;
+  core: 'singbox' | 'xray';
+  mechanism: ForwardMechanism;
+  includeInSub: boolean;
+  action: 'create' | 'skip';
+  reason?: string;
+}
+
+export interface ForwardBatchPlan {
+  items: ForwardBatchItem[];
+  createCount: number;
+  skipCount: number;
+}
+
+export interface ForwardBatchResult {
+  created: ForwardBatchItem[];
+  skipped: ForwardBatchItem[];
+  errors: { key: string; name: string; message: string }[];
 }
 
 // ---------- 一键部署 ----------

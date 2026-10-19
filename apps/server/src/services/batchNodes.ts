@@ -53,11 +53,16 @@ export function batchCreateNodes(db: DatabaseSync, serverId: number, b: BatchNod
     const isReality = m.tlsMode === 'reality';
     const sni = isReality && b.realitySni ? b.realitySni : undefined;
     const name = `${server.name}-${tpl.replace(/^xray-/, '')}-${suffix}`;
-    const node =
-      b.core === 'singbox'
-        ? createNode(db, { template: tpl, name, serverId, sni } as any)
-        : createXrayNode(db, { template: tpl, name, serverId, sni } as any);
-    result.created.push({ name: (node as Row).name, port: (node as Row).listen_port });
+    // 单条失败(如可用端口白名单用尽)不拖垮整批:记入 skipped 继续下一条
+    try {
+      const node =
+        b.core === 'singbox'
+          ? createNode(db, { template: tpl, name, serverId, sni } as any)
+          : createXrayNode(db, { template: tpl, name, serverId, sni } as any);
+      result.created.push({ name: (node as Row).name, port: (node as Row).listen_port });
+    } catch (err) {
+      result.skipped.push({ template: tpl, reason: (err as Error).message });
+    }
   }
   return result;
 }

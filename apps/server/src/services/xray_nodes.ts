@@ -4,7 +4,7 @@ import { HttpError } from './errors.js';
 import { encryptJson, decryptJson } from './creds.js';
 import { genRandomHex, genPassword } from '../core/crypto.js';
 import { XRAY_TEMPLATE_META, XRAY_PROTOCOL_DEFAULTS, genXrayNodeCreds, xrayNodeDefaults } from './xray_templates.js';
-import { randomFreePort, assertPortFree, globallyUsedPorts } from './ports.js';
+import { assertPortFree, allocatePortForServer, assertPortAllowedOnServer } from './ports.js';
 import { markDirty } from './deployState.js';
 import { requestTopologySync } from '../core/topology/trigger.js';
 import { buildShareLink, type NodeView } from '../core/subscribe/index.js';
@@ -129,11 +129,15 @@ export function createXrayNode(db: DatabaseSync, b: XrayNodeInput) {
     landingId = landing.id;
   }
 
-  // 端口分配:排除本表与 sing-box 节点端口避免冲突
-  const used = (db.prepare('SELECT listen_port FROM xray_nodes WHERE server_id = ?').all(b.serverId) as unknown as { listen_port: number }[]).map((r) => r.listen_port);
-  const sbUsed = (db.prepare('SELECT listen_port FROM nodes WHERE server_id = ?').all(b.serverId) as unknown as { listen_port: number }[]).map((r) => r.listen_port);
-  const port = b.port ? Number(b.port) : randomFreePort(globallyUsedPorts(db));
-  if (b.port) assertPortFree(db, b.serverId, port, { selfTable: 'xray_nodes' });
+  // 端口:手动指定(须在该机可用端口白名单内),或按白名单自动分配(与 sing-box 节点同一套规则)
+  let port: number;
+  if (b.port) {
+    port = Number(b.port);
+    assertPortAllowedOnServer(db, b.serverId, port);
+    assertPortFree(db, b.serverId, port, { selfTable: 'xray_nodes' });
+  } else {
+    port = allocatePortForServer(db, b.serverId);
+  }
 
   // xhttp 与 vision flow 不兼容
   const flow = meta.protocol === 'vless' && meta.transport !== 'xhttp' ? (b.flow || 'xtls-rprx-vision') : '';
@@ -226,7 +230,10 @@ export function updateXrayNode(db: DatabaseSync, id: number, b: XrayNodeUpdateIn
   }
 
   const port = b.port !== undefined ? Number(b.port) : row.listen_port;
-  if (b.port !== undefined) assertPortFree(db, row.server_id, port, { selfTable: 'xray_nodes', excludeNodeId: id });
+  if (b.port !== undefined) {
+    assertPortAllowedOnServer(db, row.server_id, port);
+    assertPortFree(db, row.server_id, port, { selfTable: 'xray_nodes', excludeNodeId: id });
+  }
 
   const nextWsPath = b.wsPath !== undefined ? b.wsPath : row.ws_path;
   requestTopologySync(db);

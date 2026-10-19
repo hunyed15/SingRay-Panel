@@ -6,6 +6,8 @@ import { HttpError } from '../services/errors.js';
 import { decrypt } from '../core/crypto.js';
 import { config } from '../config.js';
 import { preflight, applyForward, reconcile } from '../core/forward/index.js';
+import { assertPortAllowedOnServer, allocatePortForServer } from '../services/ports.js';
+import { planBatchForward, executeBatchForward } from '../services/forwardBatch.js';
 import { serverConn } from '../services/conn.js';
 import type { Row } from '../services/row.js';
 
@@ -24,6 +26,17 @@ const createSchema = z.object({
 });
 
 const idParam = z.object({ id: z.coerce.number().int() });
+
+/** 一键添加:入口机(多选)× 落地节点(多选) */
+const batchSchema = z.object({
+  entryServerIds: z.array(z.coerce.number().int()).min(1, '请至少选择一台入口机').max(50),
+  targets: z
+    .array(z.object({ type: z.enum(['singbox', 'xray']), id: z.coerce.number().int() }))
+    .min(1, '请至少选择一个落地节点')
+    .max(500),
+  mechanism: z.enum(['iptables', 'socat']).optional(),
+  includeInSub: z.boolean().optional(),
+});
 
 const getServer = (db: ReturnType<typeof getDb>, id: number): Row => {
   const row = db.prepare('SELECT * FROM servers WHERE id = ?').get(id) as Row | undefined;
@@ -73,9 +86,17 @@ export default async function portForwardRoutes(app: FastifyInstance): Promise<v
         throw new HttpError(400, `目标 ${b.targetNodeType === 'singbox' ? 'SingBox' : 'Xray'} 节点不存在`);
       }
     }
-    const port = b.entryPort || 20000 + Math.floor(Math.random() * 40000);
-    if (db.prepare('SELECT id FROM port_forwards WHERE entry_server_id = ? AND entry_port = ?').get(b.entryServerId, port)) {
-      throw new HttpError(409, `入口端口 ${port} 已被其他转发规则占用`);
+    // 入口端口:显式指定时必须在入口机的可用端口白名单内(NAT 机器只有部分端口能对外);
+    // 留空则按白名单自动分配(无白名单时沿用原有随机策略)
+    let port: number;
+    if (b.entryPort) {
+      port = Number(b.entryPort);
+      assertPortAllowedOnServer(db, b.entryServerId, port, '入口机');
+      if (db.prepare('SELECT id FROM port_forwards WHERE entry_server_id = ? AND entry_port = ?').get(b.entryServerId, port)) {
+        throw new HttpError(409, `入口端口 ${port} 已被其他转发规则占用`);
+      }
+    } else {
+      port = allocatePortForServer(db, b.entryServerId);
     }
 
     const conn = serverConn(db, entry.id);
@@ -98,6 +119,12 @@ export default async function portForwardRoutes(app: FastifyInstance): Promise<v
     }
     return { port_forward: item(db, db.prepare('SELECT * FROM port_forwards WHERE id = ?').get(rowId) as Row) };
   });
+
+  /** 一键添加:预览(端口按白名单确定性分配,不落库、不碰机器) */
+  app.post('/batch/preview', async (req) => planBatchForward(getDb(), batchSchema.parse(req.body)));
+
+  /** 一键添加:执行(逐条下发,失败条目回滚并单独汇报) */
+  app.post('/batch', async (req) => executeBatchForward(getDb(), batchSchema.parse(req.body)));
 
   /** 订阅整合开关(也可扩展更多可编辑字段) */
   app.put('/:id', async (req) => {

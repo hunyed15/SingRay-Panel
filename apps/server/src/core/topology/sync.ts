@@ -40,7 +40,7 @@ async function removeRule(
 export async function syncTopology(db: DatabaseSync): Promise<SyncResult> {
   const machines = loadMachines(db);
   const nodes = loadRelayableNodes(db);
-  const desired = planTopology(machines, nodes);
+  const desired = planTopology(machines, nodes).rules;
   const { toCreate, toDelete } = diffRules(db, desired);
   const errors: string[] = [];
 

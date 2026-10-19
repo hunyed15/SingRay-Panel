@@ -18,10 +18,10 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { DeleteOutlined, NodeIndexOutlined, PlusOutlined, SyncOutlined } from '@ant-design/icons';
+import { DeleteOutlined, NodeIndexOutlined, PlusOutlined, SyncOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as api from '../services/api';
-import type { ForwardMechanism, NodeItem, PortForwardItem, Server, XrayNodeItem } from '../services/types';
+import type { ForwardBatchInput, ForwardBatchItem, ForwardBatchPlan, ForwardMechanism, NodeItem, PortForwardItem, Server, XrayNodeItem } from '../services/types';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { EmptyState } from '../components/EmptyState';
 import { MECHANISM_META } from '../utils/status';
@@ -35,6 +35,17 @@ interface WizardValues {
   targetPort: number;
   mechanism: ForwardMechanism;
 }
+
+interface BatchValues {
+  entryServerIds: number[];
+  targetKeys: string[];
+  /** 留空 = 跟随各入口机自己的机制设置 */
+  mechanism?: ForwardMechanism;
+  includeInSub: boolean;
+}
+
+/** 不进订阅、中转无意义的协议(与后端排除口径一致) */
+const NOT_RELAYABLE = new Set(['socks', 'http', 'tunnel']);
 
 const STEPS = [
   { title: '入口机' },
@@ -83,7 +94,12 @@ export function PortForwardsPage() {
   const [reconciling, setReconciling] = useState(false);
   /** 按核心筛选:all / singbox / xray */
   const [coreFilter, setCoreFilter] = useState<'all' | 'singbox' | 'xray'>('all');
+  /** 一键添加(入口机多选 × 落地节点多选) */
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchPlan, setBatchPlan] = useState<ForwardBatchPlan | null>(null);
+  const [batchBusy, setBatchBusy] = useState<'preview' | 'create' | null>(null);
   const [form] = Form.useForm<WizardValues>();
+  const [batchForm] = Form.useForm<BatchValues>();
 
   const forwards = data?.forwards ?? [];
   const servers: Server[] = data?.servers ?? [];
@@ -101,6 +117,9 @@ export function PortForwardsPage() {
 
   const landingServerId = Form.useWatch('landingServerId', form);
   const mechanism = Form.useWatch('mechanism', form) ?? 'iptables';
+  const entryServerId = Form.useWatch('entryServerId', form);
+  /** 入口机的可用端口白名单(NAT 机器);无则空串 */
+  const entryPortAllow = servers.find((s) => s.id === entryServerId)?.port_allow ?? '';
   // 目标节点限定为所选落地机上的节点
   const landingNodes = [
     ...nodes
@@ -227,6 +246,107 @@ export function PortForwardsPage() {
     }
   };
 
+  // ---------- 一键添加 ----------
+
+  /** 可选落地节点(排除不进订阅、中转无意义的协议) */
+  const targetOptions = [
+    ...nodes
+      .filter((n) => !NOT_RELAYABLE.has(n.protocol))
+      .map((n) => ({ value: `singbox:${n.id}`, label: `[SingBox] ${n.name} · ${n.server_name} :${n.listen_port}` })),
+    ...xrayNodes
+      .filter((n) => !NOT_RELAYABLE.has(n.protocol))
+      .map((n) => ({ value: `xray:${n.id}`, label: `[Xray] ${n.name} · ${n.server_name} :${n.listen_port}` })),
+  ];
+
+  const openBatch = () => {
+    setBatchPlan(null);
+    setBatchOpen(true);
+  };
+
+  const toBatchInput = (vals: BatchValues): ForwardBatchInput => ({
+    entryServerIds: vals.entryServerIds ?? [],
+    targets: (vals.targetKeys ?? []).map((k) => {
+      const [type, id] = k.split(':');
+      return { type: type as 'singbox' | 'xray', id: Number(id) };
+    }),
+    mechanism: vals.mechanism || undefined,
+    includeInSub: vals.includeInSub,
+  });
+
+  /** 预览端口分配(不落库):让用户在写机器之前看到每条规则会用什么端口 */
+  const handleBatchPreview = async () => {
+    let vals: BatchValues;
+    try {
+      vals = await batchForm.validateFields();
+    } catch {
+      return;
+    }
+    setBatchBusy('preview');
+    try {
+      setBatchPlan(await api.previewBatchPortForwards(toBatchInput(vals)));
+    } catch {
+      // 错误提示由 api 层统一弹出
+    } finally {
+      setBatchBusy(null);
+    }
+  };
+
+  const handleBatchCreate = async () => {
+    let vals: BatchValues;
+    try {
+      vals = await batchForm.validateFields();
+    } catch {
+      return;
+    }
+    setBatchBusy('create');
+    try {
+      const r = await api.createBatchPortForwards(toBatchInput(vals));
+      const failed = r.errors.length ? `,失败 ${r.errors.length} 条(${r.errors[0].name}:${r.errors[0].message})` : '';
+      message.success(`一键添加完成:创建 ${r.created.length} 条,跳过 ${r.skipped.length} 条${failed}`);
+      setBatchOpen(false);
+      setBatchPlan(null);
+      reload();
+    } catch {
+      // 错误提示由 api 层统一弹出
+    } finally {
+      setBatchBusy(null);
+    }
+  };
+
+  /** 一键添加预览表格 */
+  const batchColumns: ColumnsType<ForwardBatchItem> = [
+    { title: '入口机', dataIndex: 'entryServerName', width: 110 },
+    {
+      title: '入口端口',
+      dataIndex: 'entryPort',
+      width: 90,
+      render: (v: number | null) => (v ? <Typography.Text code>{v}</Typography.Text> : '-'),
+    },
+    { title: '→ 落地机', dataIndex: 'landingServerName', width: 110 },
+    { title: '目标节点', dataIndex: 'targetNodeName', width: 180, ellipsis: true },
+    {
+      title: '机制',
+      dataIndex: 'mechanism',
+      width: 80,
+      render: (m: ForwardMechanism) => <Tag color={MECHANISM_META[m]?.tagColor ?? 'default'}>{MECHANISM_META[m]?.text ?? m}</Tag>,
+    },
+    {
+      title: '状态',
+      key: 'action',
+      render: (_, r) =>
+        r.action === 'create' ? (
+          <Tag color="green">新建</Tag>
+        ) : (
+          <Flex gap={4} align="center">
+            <Tag>跳过</Tag>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {r.reason}
+            </Typography.Text>
+          </Flex>
+        ),
+    },
+  ];
+
   const columns: ColumnsType<PortForwardItem> = [
     {
       title: '名称',
@@ -337,6 +457,9 @@ export function PortForwardsPage() {
           </Button>
           <Button icon={<SyncOutlined />} onClick={() => { setReconcileReport(null); setReconcileOpen(true); }}>
             对账
+          </Button>
+          <Button icon={<ThunderboltOutlined />} onClick={openBatch}>
+            一键添加
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
             新建中转
@@ -480,10 +603,11 @@ export function PortForwardsPage() {
             <Flex gap={16}>
               <Form.Item
                 name="entryPort"
-                label="入口端口(留空自动分配)"
+                label="入口端口(留空则按白名单自动分配)"
                 style={{ flex: 1 }}
               >
-                <InputNumber min={20000} max={65000} style={{ width: '100%' }} />
+                {/* 不锁 20000-65000:NAT 机器的可用端口段可能落在任意区间 */}
+                <InputNumber min={1} max={65535} style={{ width: '100%' }} />
               </Form.Item>
               <Form.Item
                 name="targetPort"
@@ -497,6 +621,15 @@ export function PortForwardsPage() {
             <Typography.Text type="secondary">
               客户端连接「入口机:入口端口」,流量被转发到「落地机:目标节点端口」。
             </Typography.Text>
+            {entryPortAllow && (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginTop: 8 }}
+                message={`该入口机的可用端口:${entryPortAllow}`}
+                description="手填的入口端口必须在白名单内;留空则自动从白名单分配(NAT 机器只有这些端口能对外)。"
+              />
+            )}
           </div>
 
           {/* 步骤 4:机制 */}
@@ -550,6 +683,105 @@ export function PortForwardsPage() {
         </Form>
       </Modal>
 
+      {/* 一键添加:入口机(多选)× 落地节点(多选)→ 预览端口 → 批量创建 */}
+      <Modal
+        title="一键添加中转规则"
+        open={batchOpen}
+        width={880}
+        maskClosable={false}
+        destroyOnHidden
+        onCancel={() => setBatchOpen(false)}
+        footer={
+          <Flex justify="space-between">
+            <Button onClick={() => setBatchOpen(false)}>取消</Button>
+            <Flex gap={8}>
+              <Button loading={batchBusy === 'preview'} onClick={handleBatchPreview}>
+                预览端口分配
+              </Button>
+              <Button
+                type="primary"
+                loading={batchBusy === 'create'}
+                disabled={!batchPlan || batchPlan.createCount === 0}
+                onClick={handleBatchCreate}
+              >
+                创建{batchPlan ? ` ${batchPlan.createCount} 条` : ''}
+              </Button>
+            </Flex>
+          </Flex>
+        }
+      >
+        <Form
+          form={batchForm}
+          layout="vertical"
+          requiredMark={false}
+          initialValues={{ entryServerIds: [], targetKeys: [], includeInSub: true }}
+        >
+          <Form.Item
+            name="entryServerIds"
+            label="入口机(可多选,对外暴露端口的机器)"
+            rules={[{ required: true, message: '请选择入口机' }]}
+            extra="每台入口机都会为下面选中的每个节点生成一条规则;端口从该机的可用端口白名单里取"
+          >
+            <Select
+              mode="multiple"
+              showSearch
+              optionFilterProp="label"
+              placeholder="选择入口机"
+              options={serverOptions(relayServers.length ? relayServers : servers)}
+            />
+          </Form.Item>
+          <Form.Item
+            name="targetKeys"
+            label="落地节点(可多选)"
+            rules={[{ required: true, message: '请选择落地节点' }]}
+            extra={
+              <Flex gap={8} align="center">
+                <Typography.Text type="secondary">socks / http / tunnel 不进订阅,不参与中转</Typography.Text>
+                <Button size="small" type="link" onClick={() => batchForm.setFieldValue('targetKeys', targetOptions.map((o) => o.value))}>
+                  全选 {targetOptions.length} 个节点
+                </Button>
+              </Flex>
+            }
+          >
+            <Select mode="multiple" showSearch optionFilterProp="label" placeholder="选择落地节点" options={targetOptions} />
+          </Form.Item>
+          <Flex gap={16}>
+            <Form.Item name="mechanism" label="转发机制" style={{ flex: 1 }} extra="留空 = 跟随各入口机自己的设置">
+              <Select
+                allowClear
+                placeholder="跟随入口机设置"
+                options={[
+                  { value: 'socat', label: 'socat(推荐,容器环境通用)' },
+                  { value: 'iptables', label: 'iptables DNAT(仅独立内核机器)' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item name="includeInSub" label="加入订阅" valuePropName="checked" style={{ flex: 1 }}>
+              <Switch />
+            </Form.Item>
+          </Flex>
+        </Form>
+
+        {batchPlan && (
+          <Flex vertical gap={8}>
+            <Alert
+              type={batchPlan.createCount ? 'info' : 'warning'}
+              showIcon
+              message={`将创建 ${batchPlan.createCount} 条,跳过 ${batchPlan.skipCount} 条`}
+              description="端口已按入口机的可用端口白名单分配;点「创建」才会真正写入机器。"
+            />
+            <Table<ForwardBatchItem>
+              rowKey="key"
+              size="small"
+              pagination={false}
+              scroll={{ y: 260 }}
+              dataSource={batchPlan.items}
+              columns={batchColumns}
+            />
+          </Flex>
+        )}
+      </Modal>
+
       {/* 拓扑:自动中转的期望规则与差异 */}
       <Modal title="中转拓扑(自动规则)" open={topologyOpen} onCancel={() => setTopologyOpen(false)} footer={null} width={760}>
         <Flex vertical gap={12}>
@@ -566,6 +798,9 @@ export function PortForwardsPage() {
                 {topology.machines.map((m) => (
                   <Tag key={m.id} color={m.ipStack === 'dual' ? 'green' : m.ipStack === 'unknown' ? 'default' : 'blue'}>
                     {m.name}: {m.ipStack} / {m.relayMechanism}
+                    {m.portAllow.length
+                      ? ` / NAT ${m.portAllow.map((r) => (r.start === r.end ? String(r.start) : `${r.start}-${r.end}`)).join(',')}`
+                      : ''}
                   </Tag>
                 ))}
               </Flex>
@@ -579,6 +814,32 @@ export function PortForwardsPage() {
                       重新探测
                     </Button>
                   }
+                />
+              )}
+              {topology.skipped.length > 0 && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message={`${topology.skipped.length} 个节点因「可用端口白名单」未生成中转`}
+                  description={
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {topology.skipped.slice(0, 6).map((s) => (
+                        <li key={`${s.nodeId}-${s.machineId}`}>{s.reason}</li>
+                      ))}
+                      {topology.skipped.length > 6 && <li>…等共 {topology.skipped.length} 条</li>}
+                    </ul>
+                  }
+                />
+              )}
+              {topology.portAllowWarnings.length > 0 && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message={`${topology.portAllowWarnings.length} 个节点端口不在自己机器的白名单内(不会自动改号)`}
+                  description={topology.portAllowWarnings
+                    .slice(0, 8)
+                    .map((w) => `${w.nodeName} :${w.port} @ ${w.machineName}`)
+                    .join('、')}
                 />
               )}
               <Typography.Text strong>期望规则({topology.desired.length} 条,含两跳中间规则)</Typography.Text>

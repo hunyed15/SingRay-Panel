@@ -1,6 +1,7 @@
 // 端口分配与唯一性校验(移植自旧 ports.js,同时覆盖 nodes/xray_nodes 两张表)
 import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from './errors.js';
+import { parsePortAllow, containsPort, describePortRanges, type PortRange } from './portAllow.js';
 
 /** 常见代理/Web 端口黑名单(避免明显指纹),其余全随机 */
 const AVOID = new Set([
@@ -58,4 +59,59 @@ export function globallyUsedPorts(db: DatabaseSync): number[] {
     )
     .all() as { p: number }[];
   return rows.map((r) => r.p);
+}
+
+// ---------- 机器可用端口白名单(NAT 场景) ----------
+// NAT 机器的公网端口段由服务商映射,只有其中端口可用。白名单同时约束:
+//   1) 该机上节点的监听端口;2) 该机作为中转入口时的入口端口。
+
+/** 机器可用端口区间;空数组 = 不限制(写入时已校验格式,读到的脏数据按不限制处理) */
+export function serverPortRanges(db: DatabaseSync, serverId: number): PortRange[] {
+  const row = db.prepare('SELECT port_allow FROM servers WHERE id = ?').get(serverId) as
+    | { port_allow: string }
+    | undefined;
+  return parsePortAllow(row?.port_allow ?? '').ranges;
+}
+
+export function isPortAllowedOnServer(db: DatabaseSync, serverId: number, port: number): boolean {
+  const ranges = serverPortRanges(db, serverId);
+  return ranges.length === 0 || containsPort(ranges, port);
+}
+
+/** 手填端口越界 → 400,并列出该机可用端口(比「端口冲突」更早暴露配置错误) */
+export function assertPortAllowedOnServer(db: DatabaseSync, serverId: number, port: number, who = '该机器'): void {
+  const ranges = serverPortRanges(db, serverId);
+  if (ranges.length === 0 || containsPort(ranges, port)) return;
+  throw new HttpError(400, `${who}的可用端口白名单不含 ${port}(可用端口:${describePortRanges(ranges)})`);
+}
+
+/** 白名单内最小可用端口;无可用返回 null */
+export function pickPortFromRanges(usedPorts: number[], ranges: PortRange[]): number | null {
+  const used = new Set(usedPorts);
+  for (const r of ranges) {
+    for (let p = r.start; p <= r.end; p++) {
+      if (!used.has(p)) return p;
+    }
+  }
+  return null;
+}
+
+/**
+ * 为某台机器分配端口。
+ * 无白名单 → 保持原有「全局随机」策略(避免按序分配被按规律封端口);
+ * 有白名单 → 取白名单内最小可用端口:端口段通常很小,确定性分配让「一键添加」的
+ * 预览端口与实际创建端口一致。
+ */
+export function allocatePortForServer(db: DatabaseSync, serverId: number): number {
+  const ranges = serverPortRanges(db, serverId);
+  const used = globallyUsedPorts(db);
+  if (ranges.length === 0) return randomFreePort(used);
+  const port = pickPortFromRanges(used, ranges);
+  if (port === null) {
+    throw new HttpError(
+      400,
+      `该机器的可用端口已用尽(白名单 ${describePortRanges(ranges)},这些端口已被其他节点/规则占用)`,
+    );
+  }
+  return port;
 }

@@ -236,6 +236,21 @@ export function ServersPage() {
       ),
     },
     {
+      title: '可用端口',
+      key: 'port_allow',
+      width: 120,
+      render: (_, record) =>
+        record.port_allow ? (
+          <Tooltip title={`NAT 可用端口白名单:${record.port_allow}(该机节点端口与中转入口端口都只从这里分配)`}>
+            <Tag color="orange" style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {record.port_allow}
+            </Tag>
+          </Tooltip>
+        ) : (
+          <Typography.Text type="secondary">不限</Typography.Text>
+        ),
+    },
+    {
       title: '最近探测',
       dataIndex: 'last_seen',
       width: 110,

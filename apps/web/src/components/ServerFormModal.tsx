@@ -25,7 +25,33 @@ interface FormValues {
   jumpServerId?: number | null;
   relayMechanism?: 'iptables' | 'socat';
   preferViaServerId?: number | null;
+  /** 可用端口白名单(NAT 场景);空 = 不限制 */
+  portAllow?: string;
 }
+
+/**
+ * 白名单格式校验(服务端才是权威,这里只做即时反馈):
+ * 允许 `32679-32699,30000` 这类混写,逗号/顿号/空白分隔。
+ */
+const validatePortAllow = (_: unknown, value?: string) => {
+  const text = (value ?? '').trim();
+  if (!text) return Promise.resolve();
+  for (const token of text.split(/[,，、\s]+/).filter(Boolean)) {
+    const single = /^\d{1,5}$/.test(token);
+    const range = /^(\d{1,5})[-~](\d{1,5})$/.exec(token);
+    if (!single && !range) {
+      return Promise.reject(new Error(`无法识别的端口写法:"${token}"(示例:32679-32699,30000)`));
+    }
+    const nums = single ? [Number(token)] : [Number(range![1]), Number(range![2])];
+    if (nums.some((n) => n < 1 || n > 65535)) {
+      return Promise.reject(new Error(`端口超出范围(1-65535):${token}`));
+    }
+    if (range && nums[1] < nums[0]) {
+      return Promise.reject(new Error(`端口区间起止倒置:${token}`));
+    }
+  }
+  return Promise.resolve();
+};
 
 const ROLE_OPTIONS = [
   { value: 'relay' as const, label: '中转机' },
@@ -73,6 +99,7 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
         jumpServerId: record.jump_server_id ?? null,
         relayMechanism: record.relay_mechanism ?? 'socat',
         preferViaServerId: record.prefer_via_server_id ?? null,
+        portAllow: record.port_allow ?? '',
       });
     } else {
       form.setFieldsValue({
@@ -87,6 +114,7 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
         sshAuthType: 'key',
         sshAuthSecret: '',
         sshSudo: false,
+        portAllow: '',
       });
     }
   }, [open, record, form]);
@@ -105,6 +133,8 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
         role: values.role,
         control: values.control,
         region: values.region,
+        // 可用端口白名单是机器级设置(与 control 无关),显式传空串 = 清空限制
+        portAllow: (values.portAllow ?? '').trim(),
       };
       if (values.control === 'ssh') {
         base.host = values.host;
@@ -182,6 +212,15 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
               { value: 'iptables', label: 'iptables DNAT(仅独立内核机器)' },
             ]}
           />
+        </Form.Item>
+        <Form.Item
+          name="portAllow"
+          label="可用端口白名单(可选,NAT 机器填这里)"
+          tooltip="NAT 机器只有服务商映射过的端口能对外。填了之后,该机的节点端口、以及它作为中转入口时的入口端口,都只会从这些端口里分配;留空 = 不限制"
+          rules={[{ validator: validatePortAllow }]}
+          extra="格式:32679-32699,30000(逗号分隔,端口段与单个端口可混写)"
+        >
+          <Input placeholder="留空 = 不限制" allowClear />
         </Form.Item>
         <Form.Item
           name="control"

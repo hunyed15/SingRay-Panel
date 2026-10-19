@@ -29,6 +29,9 @@
 - 入口机端口 → 落地机节点端口，**socat（默认，容器环境通用）与 iptables DNAT（v4/v6 自动识别）双机制显式选择**
 - 创建前预检（ip_forward、防火墙、端口占用），规则带标签，**reconcile 一键对账**机器实际规则与数据库
 - 中转线路可一键加入订阅
+- **自动中转拓扑**：节点/机器变更后自动在中转机上生成转发规则（IPv6-only 落地机经双栈机两跳），全链路复用同一端口，防抖自动同步
+- **NAT 机器可用端口白名单**：服务器上填 `32679-32699,30000`（端口段与单端口混写），该机的节点监听端口、以及它作为中转入口的端口都只从这里分配；拓扑引擎对「白名单不含该端口」的中转直接跳过并给出原因，存量越界端口只告警、**绝不悄悄改号**
+- **一键添加中转规则**：入口机（可多选）× 落地节点（可多选/全选）→ 预览端口分配（白名单内、全局唯一）→ 批量创建，逐条汇报跳过原因与失败项
 
 ### 证书管理
 - ACME（Let's Encrypt）证书签发/续期/删除，acme.sh 自动续期并重载核心
@@ -121,7 +124,7 @@ npm run migrate -- --from <旧库路径> --to ./data/panel.db             # 正�
 认证 `POST /api/auth/login` · `GET /api/auth/me` · `PUT /api/auth/account`；
 服务器 `GET|POST /api/servers` · `PUT|DELETE /api/servers/:id` · `POST /api/servers/:id/test` · `POST /api/servers/:id/install|restart|uninstall` · `POST /api/servers/:id/xray-<action>` · `POST /api/servers/:id/batch-nodes` · `GET /api/servers/:id/cert-status` · `POST /api/servers/:id/issue-cert` · `GET /api/servers/certs`；
 节点 `GET|POST /api/nodes` · `GET|PUT|DELETE /api/nodes/:id` · `POST /api/nodes/:id/toggle` · `POST /api/nodes/:id/test`（`/api/xray/nodes` 同构，含 `purge`）；
-中转 `GET|POST /api/port-forwards` · `PUT|DELETE /api/port-forwards/:id` · `POST /api/port-forwards/preflight` · `POST /api/port-forwards/reconcile`；
+中转 `GET|POST /api/port-forwards` · `PUT|DELETE /api/port-forwards/:id` · `POST /api/port-forwards/preflight` · `POST /api/port-forwards/reconcile` · `POST /api/port-forwards/batch/preview|batch`；
 部署 `POST /api/deploy/all` · `POST /api/deploy/:id`；
 测速 `POST /api/test/nodes/:id` · `POST /api/test/xray-nodes/:id`；
 设置 `GET|PUT /api/settings`、SNI 库 `/api/snis`。

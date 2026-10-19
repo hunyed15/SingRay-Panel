@@ -6,6 +6,7 @@ import { genRealityKeypair, genSsPassword, genShortId } from '../core/crypto.js'
 import { testConnection, type ExecFn } from '../core/ssh/executor.js';
 import { serverConn } from './conn.js';
 import { requestTopologySync } from '../core/topology/trigger.js';
+import { parsePortAllow } from './portAllow.js';
 
 export interface ServerRow {
   id: number;
@@ -30,6 +31,8 @@ export interface ServerRow {
   ip_stack: string;
   relay_mechanism: string;
   prefer_via_server_id: number | null;
+  /** 可用端口白名单(NAT 场景);空串 = 不限制 */
+  port_allow: string;
 }
 
 export interface ServerInput {
@@ -53,6 +56,19 @@ export interface ServerInput {
    * 仅对需要中间跳的落地机(如 IPv6-only)有意义。
    */
   preferViaServerId?: number | null;
+  /**
+   * 可用端口白名单(NAT 场景),形如 `32679-32699,30000`;空串/null = 不限制。
+   * 约束该机的节点监听端口与作为中转入口时的入口端口。
+   */
+  portAllow?: string | null;
+}
+
+/** 校验白名单格式(非法格式直接 400,而不是等到分配端口时才失败) */
+function normalizePortAllow(value: string | null | undefined): string {
+  const text = (value ?? '').trim();
+  const { error } = parsePortAllow(text);
+  if (error) throw new HttpError(400, error);
+  return text;
 }
 
 const SELECT_ALL = 'SELECT * FROM servers';
@@ -103,8 +119,8 @@ export function createServer(db: DatabaseSync, b: ServerInput): Omit<ServerRow, 
   const sshSecret = control === 'ssh' ? encryptSecret(b.sshAuthSecret ?? '') : '';
   const info = db
     .prepare(
-      `INSERT INTO servers (name, role, control, host, client_host, ssh_port, ssh_user, ssh_auth_type, ssh_auth_secret, ssh_sudo, region, jump_server_id, relay_mechanism, prefer_via_server_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO servers (name, role, control, host, client_host, ssh_port, ssh_user, ssh_auth_type, ssh_auth_secret, ssh_sudo, region, jump_server_id, relay_mechanism, prefer_via_server_id, port_allow)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .run(
       b.name,
@@ -121,6 +137,7 @@ export function createServer(db: DatabaseSync, b: ServerInput): Omit<ServerRow, 
       b.jumpServerId ?? null,
       b.relayMechanism ?? 'socat',
       b.preferViaServerId ?? null,
+      normalizePortAllow(b.portAllow),
     );
   const id = Number(info.lastInsertRowid);
   createRoleSettings(db, id, b.role);
@@ -138,7 +155,7 @@ export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput)
     db.prepare('UPDATE servers SET ssh_auth_secret = ? WHERE id = ?').run(encryptSecret(b.sshAuthSecret), id);
   }
   db.prepare(
-    `UPDATE servers SET name=?, role=?, control=?, host=?, client_host=?, ssh_port=?, ssh_user=?, ssh_auth_type=?, ssh_sudo=?, region=?, jump_server_id=?, relay_mechanism=?, prefer_via_server_id=?
+    `UPDATE servers SET name=?, role=?, control=?, host=?, client_host=?, ssh_port=?, ssh_user=?, ssh_auth_type=?, ssh_sudo=?, region=?, jump_server_id=?, relay_mechanism=?, prefer_via_server_id=?, port_allow=?
      WHERE id=?`,
   ).run(
     b.name ?? row.name,
@@ -155,6 +172,8 @@ export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput)
     b.jumpServerId !== undefined ? b.jumpServerId : row.jump_server_id,
     b.relayMechanism ?? row.relay_mechanism,
     b.preferViaServerId !== undefined ? b.preferViaServerId : row.prefer_via_server_id,
+    // portAllow:显式传值(含 null/空串 = 清空)才更新,不传保持原值
+    b.portAllow !== undefined ? normalizePortAllow(b.portAllow) : row.port_allow,
     id,
   );
 

@@ -28,6 +28,8 @@ const createSchema = z.object({
   relayMechanism: z.enum(['iptables', 'socat']).optional(),
   /** 两跳中转时的中间跳机器(落地机用);null = 清空(引擎自选) */
   preferViaServerId: z.coerce.number().int().nullable().optional(),
+  /** 可用端口白名单(NAT 场景),如 "32679-32699,30000";空串 = 不限制 */
+  portAllow: z.string().nullable().optional(),
 });
 
 const updateSchema = createSchema.partial();

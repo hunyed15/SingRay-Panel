@@ -39,4 +39,14 @@ describe('batchCreateNodes', () => {
     expect(r.skipped).toEqual([{ template: 'nope', reason: '未知模板' }]);
     expect(() => batchCreateNodes(db, 1, { core: 'xray', templates: [] })).toThrow();
   });
+
+  it('exhausted port whitelist skips only the overflowing template (NAT machine)', () => {
+    const db = seedDb();
+    db.prepare("UPDATE servers SET port_allow = '32679' WHERE id = 1").run();
+    const r = batchCreateNodes(db, 1, { core: 'singbox', templates: ['vless-reality', 'anytls'] });
+    expect(r.created).toHaveLength(1);
+    expect(r.created[0].port).toBe(32679);
+    expect(r.skipped).toHaveLength(1);
+    expect(r.skipped[0].reason).toMatch(/可用端口已用尽/);
+  });
 });

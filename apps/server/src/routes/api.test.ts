@@ -144,6 +144,78 @@ describe('api integration (fastify.inject)', () => {
     });
   });
 
+  it('port whitelist (NAT) gates node/forward ports + batch preview', async () => {
+    const auth = { authorization: `Bearer ${token}` };
+
+    // 非法格式在保存时就 400,而不是等到分配端口时才发现
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/api/servers',
+      headers: auth,
+      payload: { name: 'bad-nat', role: 'landing', host: '10.9.0.9', sshAuthSecret: 'K', portAllow: 'abc' },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error).toContain('无法识别');
+
+    const nat = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/servers',
+        headers: auth,
+        payload: { name: 'nat-relay', role: 'relay', host: '10.9.0.1', sshAuthSecret: 'K', portAllow: '32679-32681' },
+      })
+    ).json();
+    expect(nat.port_allow).toBe('32679-32681');
+
+    const land = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/servers',
+        headers: auth,
+        payload: { name: 'nat-land', role: 'landing', host: '10.9.0.3', sshAuthSecret: 'K', portAllow: '32679-32699' },
+      })
+    ).json();
+
+    // 手填白名单外的端口 → 400
+    const outOfRange = await app.inject({
+      method: 'POST',
+      url: '/api/nodes',
+      headers: auth,
+      payload: { template: 'vmess-ws-tls', name: 'oor', serverId: land.id, port: 40000 },
+    });
+    expect(outOfRange.statusCode).toBe(400);
+    expect(outOfRange.json().error).toContain('可用端口白名单');
+
+    // 留空 → 在白名单内分配(取最小可用)
+    const auto = await app.inject({
+      method: 'POST',
+      url: '/api/nodes',
+      headers: auth,
+      payload: { template: 'vmess-ws-tls', name: 'auto-port', serverId: land.id },
+    });
+    expect(auto.statusCode).toBe(200);
+    expect(auto.json().listen_port).toBe(32679);
+
+    // 一键添加预览:入口机白名单内分配,且避开全局已用端口(32679 已被上面节点占用)
+    const preview = await app.inject({
+      method: 'POST',
+      url: '/api/port-forwards/batch/preview',
+      headers: auth,
+      payload: { entryServerIds: [nat.id], targets: [{ type: 'singbox', id: auto.json().id }] },
+    });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json()).toMatchObject({ createCount: 1, skipCount: 0 });
+    expect(preview.json().items[0]).toMatchObject({ entryPort: 32680, core: 'singbox', action: 'create' });
+
+    const emptySelection = await app.inject({
+      method: 'POST',
+      url: '/api/port-forwards/batch/preview',
+      headers: auth,
+      payload: { entryServerIds: [], targets: [] },
+    });
+    expect(emptySelection.statusCode).toBe(400);
+  });
+
   it('account password change via api', async () => {
     const auth = { authorization: `Bearer ${token}` };
     const wrongOld = await app.inject({ method: 'PUT', url: '/api/auth/account', headers: auth, payload: { oldPassword: 'nope', newPassword: 'newpass123' } });
