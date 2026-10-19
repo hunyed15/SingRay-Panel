@@ -96,6 +96,24 @@ export function buildExecCmd(conn: Pick<SshConn, 'sudo'>, cmd: string): string {
   return `sudo -n -- sh -c '${cmd.replace(/'/g, `'\\''`)}'`;
 }
 
+/** 把任意字符串安全放进 POSIX shell 的一个参数位 */
+export function shQuote(value: string): string {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+const HOST_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$/; // 域名 / IPv4 / 不含冒号开头的 IPv6
+const V6_RE = /^[0-9A-Fa-f:]{2,45}$/; // ::1 这类以冒号开头的 IPv6
+
+/**
+ * host / client_host / 证书域名的可信边界:这些值会拼进远端 shell 命令
+ * (getent、iptables、socat unit、openssl、acme.sh)。只放行域名与 IP 的字符集,
+ * 因此不含空格/引号/分号/$/反引号,可以裸插值。
+ */
+export function isSafeHost(value: string | null | undefined): boolean {
+  if (!value || value.length > 253) return false;
+  return HOST_RE.test(value) || V6_RE.test(value);
+}
+
 export class SshExecError extends Error {
   constructor(
     message: string,

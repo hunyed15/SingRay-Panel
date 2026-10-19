@@ -1,10 +1,23 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { diffHealth, runHealthCheckCycle, resetHealthBaseline, type MachineHealth } from './healthcheck.js';
+import { diffHealth, certProbeCmd, runHealthCheckCycle, resetHealthBaseline, type MachineHealth } from './healthcheck.js';
 import { migrate } from '../db/client.js';
 
 const H = (over: Partial<MachineHealth>): MachineHealth => ({
   serverId: 1, name: 'm1', ssh: 'up', singbox: 'up', xray: 'up', certDays: null, ...over,
+});
+
+describe('certProbeCmd (host is data, never code)', () => {
+  it('quotes the cert path built from client_host', () => {
+    expect(certProbeCmd('edge.example.com')).toContain("'/etc/singray/certs/edge.example.com/fullchain.pem'");
+  });
+
+  it('keeps an injected domain inside the quoted word', () => {
+    const cmd = certProbeCmd('x; rm -rf /tmp/pwn');
+    // 分号只出现在单引号内部,不会变成命令分隔符
+    expect(cmd).toContain("'/etc/singray/certs/x; rm -rf /tmp/pwn/fullchain.pem'");
+    expect(cmd.indexOf('; rm -rf')).toBeGreaterThan(cmd.indexOf("'/etc/singray/certs/x"));
+  });
 });
 
 describe('diffHealth (transition → alerts)', () => {

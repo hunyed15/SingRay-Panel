@@ -3,7 +3,7 @@
 // All rules are tagged `singray:<id>` so reconcile can tell ours apart.
 
 import type { SshConn, ExecFn } from '../ssh/executor.js';
-import { exec, writeFile as defaultWriteFile } from '../ssh/executor.js';
+import { exec, writeFile as defaultWriteFile, isSafeHost, shQuote } from '../ssh/executor.js';
 
 export interface ForwardSpec {
   /** db row id, used in rule comments/unit names */
@@ -78,7 +78,7 @@ async function ensureIpForward(conn: SshConn, execFn: ExecFn): Promise<void> {
 export async function resolveTargetIP(conn: SshConn, host: string, execFn: ExecFn): Promise<{ ip: string; family: 'v4' | 'v6' }> {
   if (host.includes(':')) return { ip: host, family: 'v6' };
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return { ip: host, family: 'v4' };
-  const r = await execFn(conn, `getent ahosts ${host} 2>/dev/null | awk '{print $1}' | sort -u`, { timeoutClass: 'quick' });
+  const r = await execFn(conn, `getent ahosts ${shQuote(host)} 2>/dev/null | awk '{print $1}' | sort -u`, { timeoutClass: 'quick' });
   const addrs = r.stdout.trim().split('\n').filter(Boolean);
   const v4 = addrs.find((a) => !a.includes(':'));
   const v6 = addrs.find((a) => a.includes(':'));
@@ -95,6 +95,11 @@ export async function applyForward(
   /** injectable for tests; real impl stages via sftp + sudo install */
   writeFileFn: (conn: SshConn, path: string, content: string, execFn: ExecFn) => Promise<void> = defaultWriteFile,
 ): Promise<void> {
+  // landingHost 来自落地机的 client_host/host,会拼进 getent/iptables/socat 命令:
+  // 在这里一次拦住,两种机制都不再需要逐条转义。
+  if (!isSafeHost(spec.landingHost)) {
+    throw new Error(`落地地址不合法(只能是域名或 IP):${spec.landingHost}`);
+  }
   if (spec.mechanism === 'iptables') {
     await ensureIpForward(conn, execFn).catch((err) => {
       throw new Error(`开启 ip_forward 失败: ${(err as Error).message}`);

@@ -5,7 +5,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import net from 'node:net';
 import { serverConn } from '../services/conn.js';
-import { exec } from './ssh/executor.js';
+import { exec, shQuote } from './ssh/executor.js';
 import { sendAlert } from './alerts.js';
 import type { Row } from '../services/row.js';
 
@@ -53,6 +53,15 @@ export function tcpProbe(host: string, port: number, timeoutMs = 6000): Promise<
 }
 
 /** 单机检查:TCP 22 → SSH(核心状态 + 证书剩余天数,一次 SSH 会话全做) */
+/**
+ * 证书到期探测命令。域名来自用户输入(client_host),整条路径先 shQuote 包成数据,
+ * 再放进 shell —— 否则 `x; rm -rf /` 这类值会被当命令执行。
+ */
+export function certProbeCmd(domain: string): string {
+  const certFile = shQuote(`/etc/singray/certs/${domain}/fullchain.pem`);
+  return `F=${certFile}; test -f "$F" && openssl x509 -enddate -noout -in "$F" | cut -d= -f2 || echo no-cert`;
+}
+
 export async function checkServer(db: DatabaseSync, serverId: number): Promise<MachineHealth> {
   const s = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId) as Row | undefined;
   if (!s) throw new Error(`server ${serverId} not found`);
@@ -66,7 +75,7 @@ export async function checkServer(db: DatabaseSync, serverId: number): Promise<M
     const domain = (s.client_host || s.host) as string;
     const r = await exec(
       conn,
-      `systemctl is-active sing-box || echo inactive; systemctl is-active xray || echo inactive; F=/etc/singray/certs/${domain}/fullchain.pem; test -f $F && openssl x509 -enddate -noout -in $F | cut -d= -f2 || echo no-cert`,
+      `systemctl is-active sing-box || echo inactive; systemctl is-active xray || echo inactive; ${certProbeCmd(domain)}`,
       { timeoutClass: 'quick' },
     );
     const [sb, xr, certEnd] = r.stdout.trim().split('\n');

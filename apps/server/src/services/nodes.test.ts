@@ -67,6 +67,15 @@ describe('servers service', () => {
     expect(decrypt(config.appSecret, raw.ssh_auth_secret)).toBe('ssh-key-abc');
   });
 
+  it('rejects names/hosts that would escape into shell or arbitrary paths', () => {
+    const base = { role: 'relay' as const, sshAuthSecret: 'k' };
+    expect(() => createServer(db, { ...base, name: '../../etc/cron.d/x', host: '10.0.0.5' })).toThrow(HttpError);
+    expect(() => createServer(db, { ...base, name: 'ok-name', host: '10.0.0.5; id' })).toThrow(/host/);
+    expect(() => createServer(db, { ...base, name: 'ok-name', host: '10.0.0.5', clientHost: 'a$(id)' })).toThrow(/clientHost/);
+    // 中文/空格名称是正常用法(证书路径侧已 shQuote + 禁掉分隔符)
+    expect(() => createServer(db, { ...base, name: '香港 1 号', host: '10.0.0.6' })).not.toThrow();
+  });
+
   it('role change rebuilds role settings', () => {
     const updated = updateServer(db, landing.id, { role: 'relay' });
     expect(updated.role).toBe('relay');

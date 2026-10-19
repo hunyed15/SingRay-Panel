@@ -7,7 +7,7 @@
 // 配置 PANEL_CF_TOKEN 后优先用 DNS-01,否则回退 HTTP-01。续期由 acme.sh cron 自动完成。
 
 import type { SshConn, ExecFn } from '../ssh/executor.js';
-import { exec, writeFile } from '../ssh/executor.js';
+import { exec, writeFile, shQuote, isSafeHost } from '../ssh/executor.js';
 import { config } from '../../config.js';
 import { resolveCfToken } from '../../services/settings.js';
 
@@ -21,6 +21,8 @@ export interface CertStatus {
 }
 
 export function certPaths(domain: string) {
+  // domain 会进路径和 acme.sh 命令行:先过可信边界,非法值直接抛(不再拼进 shell)
+  if (!isSafeHost(domain)) throw new Error(`证书域名不合法(只能是域名或 IP):${domain}`);
   return {
     fullchain: `${CERT_BASE}/${domain}/fullchain.pem`,
     key: `${CERT_BASE}/${domain}/key.pem`,
@@ -41,10 +43,10 @@ export async function certStatus(conn: SshConn, domain: string, execFn: ExecFn =
   let certExists = false;
   let expiresAt: string | null = null;
   try {
-    const r = await execFn(conn, `test -f ${fullchain} && echo YES || echo NO`, { timeoutClass: 'quick' });
+    const r = await execFn(conn, `test -f ${shQuote(fullchain)} && echo YES || echo NO`, { timeoutClass: 'quick' });
     certExists = r.stdout.trim() === 'YES';
     if (certExists) {
-      const end = await execFn(conn, `openssl x509 -enddate -noout -in ${fullchain} | cut -d= -f2`, { timeoutClass: 'quick' });
+      const end = await execFn(conn, `openssl x509 -enddate -noout -in ${shQuote(fullchain)} | cut -d= -f2`, { timeoutClass: 'quick' });
       expiresAt = new Date(end.stdout.trim()).toISOString() || null;
     }
   } catch {
@@ -100,10 +102,10 @@ export async function issueCert(
   }
 
   // 3. 安装到固定路径 + 续期后自动重载核心
-  await execFn(conn, `mkdir -p $(dirname ${fullchain})`, { timeoutClass: 'quick' });
+  await execFn(conn, `mkdir -p $(dirname ${shQuote(fullchain)})`, { timeoutClass: 'quick' });
   await execFn(
     conn,
-    `${ACME_BIN} --install-cert -d ${domain} --fullchain-file ${fullchain} --key-file ${key} --reloadcmd "${reloadCmd}"`,
+    `${ACME_BIN} --install-cert -d ${shQuote(domain)} --fullchain-file ${shQuote(fullchain)} --key-file ${shQuote(key)} --reloadcmd ${shQuote(reloadCmd)}`,
     { timeoutClass: 'config' },
   );
   steps.push('安装证书 + 续期自动重载');
@@ -112,10 +114,10 @@ export async function issueCert(
 
 /** 部署时检测机器上是否有真证书可用(有则模板优先使用,无则退回自签) */
 export async function hasRealCert(conn: SshConn, domain: string, execFn: ExecFn = exec): Promise<boolean> {
-  if (!domain || /^\d+\.\d+\.\d+\.\d+$/.test(domain) || domain.includes(':')) return false; // IP/IPv6 无法签发
+  if (!isSafeHost(domain) || /^\d+\.\d+\.\d+\.\d+$/.test(domain) || domain.includes(':')) return false; // 非法值/IP/IPv6 无法签发
   const { fullchain } = certPaths(domain);
   try {
-    const r = await execFn(conn, `test -f ${fullchain} && echo YES || echo NO`, { timeoutClass: 'quick' });
+    const r = await execFn(conn, `test -f ${shQuote(fullchain)} && echo YES || echo NO`, { timeoutClass: 'quick' });
     return r.stdout.trim() === 'YES';
   } catch {
     return false;
@@ -138,7 +140,7 @@ async function issueCertDns01(conn: SshConn, domain: string, token: string, exec
   const r = await execFn(
     conn,
     // 环境变量只在本条命令内可见,不落盘;acme.sh dns_cf 插件读 CF_Token
-    `export CF_Token='${token}'; out=$(${ACME_BIN} --issue -d ${domain} --dns dns_cf --server letsencrypt 2>&1); rc=$?; printf '%s\\n' "$out" | tail -6; exit $rc`,
+    `export CF_Token=${shQuote(token)}; out=$(${ACME_BIN} --issue -d ${shQuote(domain)} --dns dns_cf --server letsencrypt 2>&1); rc=$?; printf '%s\\n' "$out" | tail -6; exit $rc`,
     { timeoutClass: 'install' },
   );
   if (r.stdout.trim()) {
@@ -152,7 +154,7 @@ async function issueCertDns01(conn: SshConn, domain: string, token: string, exec
 /** 查询 acme.sh 中该域名是否已有证书(避免重复签发) */
 async function hasAcmeCert(conn: SshConn, domain: string, execFn: ExecFn): Promise<boolean> {
   try {
-    const r = await execFn(conn, `${ACME_BIN} --list 2>/dev/null | grep -c '${domain}' || echo 0`, { timeoutClass: 'quick' });
+    const r = await execFn(conn, `${ACME_BIN} --list 2>/dev/null | grep -c ${shQuote(domain)} || echo 0`, { timeoutClass: 'quick' });
     return Number(r.stdout.trim()) > 0;
   } catch {
     return false;

@@ -18,6 +18,22 @@ function recordingExec(responses: Record<string, string> = {}) {
 }
 
 describe('forward: iptables (explicit mechanism)', () => {
+  it('rejects a shell-ish landing host before touching the machine', async () => {
+    const { calls, execFn } = recordingExec();
+    for (const mech of ['iptables', 'socat'] as const) {
+      await expect(
+        applyForward(conn, { ...spec, mechanism: mech, landingHost: '10.0.0.9; rm -rf /' }, false, execFn),
+      ).rejects.toThrow(/落地地址不合法/);
+    }
+    expect(calls).toHaveLength(0); // 一条命令都没发出去
+  });
+
+  it('quotes the host in the DNS lookup command', async () => {
+    const { calls, execFn } = recordingExec({ 'getent ahosts': '10.0.0.9\n' });
+    await applyForward(conn, { ...spec, landingHost: 'example.com' }, false, execFn);
+    expect(calls.find((c) => c.cmd.includes('getent ahosts'))!.cmd).toContain("getent ahosts 'example.com'");
+  });
+
   it('create writes tagged DNAT + FORWARD rules, persists, enables ip_forward', async () => {
     const { calls, execFn } = recordingExec();
     await applyForward(conn, spec, false, execFn);

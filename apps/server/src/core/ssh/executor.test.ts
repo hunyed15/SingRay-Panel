@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildConn, buildExecCmd, SshExecError, TIMEOUT_DEFAULTS_MS, testConnection, type ExecFn, type SshConn } from './executor.js';
+import { buildConn, buildExecCmd, shQuote, isSafeHost, SshExecError, TIMEOUT_DEFAULTS_MS, testConnection, type ExecFn, type SshConn } from './executor.js';
 
 const serverRow = {
   id: 1,
@@ -53,5 +53,20 @@ describe('ssh executor pure logic', () => {
     expect(e.exitCode).toBe(2);
     expect(e.cmd).toContain('ls /nope');
     expect(e.stderr).toContain('cannot access');
+  });
+
+  it('shQuote turns any string into a single shell word', () => {
+    expect(shQuote('plain')).toBe("'plain'");
+    expect(shQuote("it's")).toBe("'it'\\''s'");
+    expect(shQuote('a b; rm -rf / #`id`$HOME')).toBe("'a b; rm -rf / #`id`$HOME'");
+  });
+
+  it('isSafeHost only admits hostnames and addresses (injection boundary)', () => {
+    for (const ok of ['example.com', '10.0.0.1', 'v6.example.io', '2606:4700::1', '::1', 'a-b_c.local']) {
+      expect(isSafeHost(ok), ok).toBe(true);
+    }
+    for (const bad of ['', ' ', 'x; rm -rf /', 'a$(id)', "a'b", 'a"b', 'a b', 'a|b', 'a\nb', 'a/b', '..', 'a'.repeat(300)]) {
+      expect(isSafeHost(bad), JSON.stringify(bad)).toBe(false);
+    }
   });
 });

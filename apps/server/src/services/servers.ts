@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from './errors.js';
 import { encryptSecret, decryptSecret } from './creds.js';
 import { genRealityKeypair, genSsPassword, genShortId } from '../core/crypto.js';
-import { testConnection, type ExecFn } from '../core/ssh/executor.js';
+import { testConnection, isSafeHost, type ExecFn } from '../core/ssh/executor.js';
 import { serverConn } from './conn.js';
 import { requestTopologySync } from '../core/topology/trigger.js';
 import { parsePortAllow } from './portAllow.js';
@@ -73,6 +73,31 @@ function normalizePortAllow(value: string | null | undefined): string {
 
 const SELECT_ALL = 'SELECT * FROM servers';
 
+/**
+ * 名称/地址是远端命令的可信边界(证书路径、健康检查、转发目标、acme 域名)。
+ * 名称允许中文与空格(展示用),但禁止路径分隔符与控制字符:
+ * `name` 会拼成 `/etc/sing-box/tls/<name>.crt`,含 `/` 或 `..` 就能写到任意路径。
+ */
+const NAME_RE = /^[^/\\\u0000-\u001f]{1,64}$/;
+
+function assertSafeServerFields(b: { name?: string; host?: string; clientHost?: string }): void {
+  if (b.name !== undefined) {
+    const name = b.name.trim();
+    if (!name || !NAME_RE.test(name) || name.includes('..')) {
+      throw new HttpError(400, '名称不合法:不能为空,不能含 / \\ .. 或控制字符,长度 ≤64');
+    }
+  }
+  const fields: [string, string | undefined][] = [
+    ['host', b.host],
+    ['clientHost', b.clientHost],
+  ];
+  for (const [label, value] of fields) {
+    if (value && !isSafeHost(value)) {
+      throw new HttpError(400, `${label} 只能是域名或 IP(不能含空格、引号、分号、$ 等字符)`);
+    }
+  }
+}
+
 function getRow(db: DatabaseSync, id: number): ServerRow {
   const row = db.prepare(`${SELECT_ALL} WHERE id = ?`).get(id) as unknown as ServerRow | undefined;
   if (!row) throw new HttpError(404, '服务器不存在');
@@ -112,6 +137,7 @@ function createRoleSettings(db: DatabaseSync, id: number, role: 'relay' | 'landi
 }
 
 export function createServer(db: DatabaseSync, b: ServerInput): Omit<ServerRow, 'ssh_auth_secret'> {
+  assertSafeServerFields({ name: b.name, host: b.host, clientHost: b.clientHost });
   const control = b.control ?? 'ssh';
   if (control === 'ssh' && (!b.host || !b.sshAuthSecret)) {
     throw new HttpError(400, 'SSH 模式需要 host 与 sshAuthSecret');
@@ -147,6 +173,7 @@ export function createServer(db: DatabaseSync, b: ServerInput): Omit<ServerRow, 
 export interface ServerUpdateInput extends Partial<ServerInput> {}
 
 export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput) {
+  assertSafeServerFields({ name: b.name, host: b.host, clientHost: b.clientHost });
   const row = getRow(db, id);
   const nextRole = b.role ?? row.role;
   const control = b.control ?? row.control;
