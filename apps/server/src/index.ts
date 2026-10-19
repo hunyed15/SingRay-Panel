@@ -100,23 +100,29 @@ if (isMain) {
   buildApp()
     .then(async (app) => {
       const db = getDb();
-      registerJob('backup', 30 * 60_000, async () => {
+      /**
+       * 任务结果统一记账:成功 ok=1、失败 ok=0 并继续抛给调度器。
+       * 旧实现里三个任务都无条件 recordRun(...,true),机器全掉线时 job_runs 仍是绿的。
+       */
+      const job = (name: string, fn: () => Promise<string> | string) => async (): Promise<string> => {
+        try {
+          const detail = await fn();
+          recordRun(db, name, true, detail);
+          return detail;
+        } catch (err) {
+          recordRun(db, name, false, (err as Error).message);
+          throw err;
+        }
+      };
+
+      registerJob('backup', 30 * 60_000, job('backup', async () => {
         const hour = new Date().getHours();
         if (hour !== config.backupHour || backedUpToday()) return '未到备份时间或今日已备份,跳过';
         const r = runBackupNow(db);
-        recordRun(db, 'backup', true, r.file);
         return `备份完成: ${r.file}`;
-      });
-      registerJob('healthcheck', config.healthIntervalMin * 60_000, async () => {
-        const summary = await runHealthCheckCycle(db);
-        recordRun(db, 'healthcheck', true, summary);
-        return summary;
-      });
-      registerJob('traffic', 5 * 60_000, async () => {
-        const summary = await collectAllTraffic(db);
-        recordRun(db, 'traffic', true, summary);
-        return summary;
-      });
+      }));
+      registerJob('healthcheck', config.healthIntervalMin * 60_000, job('healthcheck', () => runHealthCheckCycle(db)));
+      registerJob('traffic', 5 * 60_000, job('traffic', () => collectAllTraffic(db)));
       startScheduler();
       await app.listen({ port: config.port, host: config.host });
     })

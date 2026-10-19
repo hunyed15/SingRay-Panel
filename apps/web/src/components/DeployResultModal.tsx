@@ -6,10 +6,12 @@ interface DeployResultModalProps {
   open: boolean;
   results: DeployAllResult[];
   onClose: () => void;
+  /** 覆盖标题(单机/单核心部署用「部署 — 结果」,批量用默认文案) */
+  title?: string;
 }
 
-/** 「部署全部」结果:每台机器 singbox / xray 双核部署状态 + 失败原因 */
-export function DeployResultModal({ open, results, onClose }: DeployResultModalProps) {
+/** 部署结果:每台机器 singbox / xray 双核部署状态 + 失败原因 */
+export function DeployResultModal({ open, results, onClose, title }: DeployResultModalProps) {
   const columns: ColumnsType<DeployAllResult> = [
     {
       title: '机器',
@@ -54,7 +56,7 @@ export function DeployResultModal({ open, results, onClose }: DeployResultModalP
   return (
     <Modal
       open={open}
-      title={allOk ? '部署全部 — 完成' : '部署全部 — 部分失败'}
+      title={title ?? (allOk ? '部署全部 — 完成' : '部署全部 — 部分失败')}
       footer={null}
       width={680}
       onCancel={onClose}

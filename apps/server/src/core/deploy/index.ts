@@ -8,7 +8,19 @@ import type { SshConn, ExecFn } from '../ssh/executor.js';
 import { exec, writeFile } from '../ssh/executor.js';
 
 export type DeployCore = 'singbox' | 'xray';
-export type DeployStepName = 'render' | 'upload' | 'verify' | 'verify-skip' | 'backup' | 'swap' | 'restart' | 'restart-fallback' | 'health' | 'health-fail';
+export type DeployStepName =
+  | 'render'
+  | 'upload'
+  | 'verify'
+  | 'verify-skip'
+  | 'backup'
+  | 'swap'
+  | 'restart'
+  | 'restart-fallback'
+  | 'health'
+  | 'health-fail'
+  | 'rollback'
+  | 'rollback-skip';
 
 export interface DeployStep {
   step: DeployStepName;
@@ -58,8 +70,8 @@ export async function deployCore(conn: SshConn, opts: DeployOpts): Promise<Deplo
   const json = JSON.stringify(opts.config, null, 2);
   step('render', true, `${json.length} bytes`);
 
-  // upload → verify → backup → swap; failure here leaves production untouched.
-  // doStep attributes failures to the step actually in flight (not a blanket 'backup').
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
   const doStep = async (name: DeployStepName, fn: () => Promise<void>) => {
     try {
       await fn();
@@ -69,6 +81,12 @@ export async function deployCore(conn: SshConn, opts: DeployOpts): Promise<Deplo
       throw err;
     }
   };
+
+  /**
+   * 是否存在可回滚的旧配置。
+   * 首次部署没有旧配置 —— 这不是错误,但意味着回滚时不能谎称"已回滚"。
+   */
+  let hasBackup = false;
 
   try {
     await doStep('upload', async () => {
@@ -83,17 +101,61 @@ export async function deployCore(conn: SshConn, opts: DeployOpts): Promise<Deplo
       step('verify-skip', true, 'xray -test compatibility; health check covers it');
     }
 
-    await doStep('backup', () => execFn(conn, `cp -f ${paths.config} ${paths.config}.bak 2>/dev/null || true`, { timeoutClass: 'quick' }).then(() => {}));
+    // 备份:区分「没有旧配置」与「备份失败」。旧实现用 `|| true` 让两者都静默通过,
+    // 结果是首次部署时既没有 .bak,回滚又报成功。
+    await doStep('backup', async () => {
+      const r = await execFn(
+        conn,
+        `if [ -f ${paths.config} ]; then cp -f ${paths.config} ${paths.config}.bak && echo BACKED-UP || echo BACKUP-FAILED; else echo NO-CONFIG; fi`,
+        { timeoutClass: 'quick' },
+      );
+      const out = r.stdout.trim();
+      if (out.includes('BACKUP-FAILED')) throw new Error(`旧配置备份失败:${paths.config}`);
+      hasBackup = out.includes('BACKED-UP');
+    });
 
-    await doStep('swap', () => execFn(conn, `mkdir -p $(dirname ${paths.config}) && install -m 600 ${tmp} ${paths.config}`, { timeoutClass: 'config' }).then(() => {}));
+    // swap:先写 .new 再 mv —— `install` 就地覆盖不是原子操作,断线会留下截断的配置
+    await doStep('swap', () =>
+      execFn(
+        conn,
+        `mkdir -p $(dirname ${paths.config}) && install -m 600 ${tmp} ${paths.config}.new && mv -f ${paths.config}.new ${paths.config}`,
+        { timeoutClass: 'config' },
+      ).then(() => {}),
+    );
   } catch (err) {
     return { ok: false, steps, error: (err as Error).message, rolledBack: false };
   }
 
-  // restart/reload + health; failure here rolls back
-  const rollback = async () => {
-    await execFn(conn, `cp -f ${paths.config}.bak ${paths.config} 2>/dev/null || true`, { timeoutClass: 'quick' }).catch(() => {});
-    await execFn(conn, `systemctl restart ${paths.unit}`, { timeoutClass: 'config' }).catch(() => {});
+  /**
+   * 回滚并**校验**结果。返回是否真的回到了可用状态:
+   * 无旧配置 / 恢复失败 / 恢复后起不来 都返回 false,由调用方如实上报。
+   */
+  const rollback = async (): Promise<boolean> => {
+    if (!hasBackup) {
+      step('rollback-skip', true, '首次部署无旧配置可回滚');
+      return false;
+    }
+    try {
+      await execFn(conn, `cp -f ${paths.config}.bak ${paths.config}`, { timeoutClass: 'quick' });
+      await execFn(conn, `systemctl restart ${paths.unit}`, { timeoutClass: 'config' });
+    } catch (err) {
+      step('rollback', false, (err as Error).message);
+      return false;
+    }
+    for (let i = 0; i < 5; i++) {
+      await sleep(1000);
+      try {
+        const r = await execFn(conn, `systemctl is-active ${paths.unit} || echo inactive`, { timeoutClass: 'quick' });
+        if (r.stdout.trim() === 'active') {
+          step('rollback', true);
+          return true;
+        }
+      } catch {
+        // 传输抖动继续轮询
+      }
+    }
+    step('rollback', false, '恢复旧配置后单元仍未 active');
+    return false;
   };
 
   try {
@@ -115,12 +177,11 @@ export async function deployCore(conn: SshConn, opts: DeployOpts): Promise<Deplo
       step('restart', true);
     }
   } catch (err) {
-    await rollback();
-    return { ok: false, steps, error: (err as Error).message, rolledBack: true };
+    const rolledBack = await rollback();
+    return { ok: false, steps, error: (err as Error).message, rolledBack };
   }
 
   // health: systemctl is-active polling (1s × 10) — fixes "restart OK but core dead"
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   for (let i = 0; i < 10; i++) {
     await sleep(1000);
     try {
@@ -137,6 +198,6 @@ export async function deployCore(conn: SshConn, opts: DeployOpts): Promise<Deplo
   const journal = await execFn(conn, `journalctl -u ${paths.unit} -n 20 --no-pager 2>/dev/null || echo no journalctl`, { timeoutClass: 'quick' })
     .then((r) => r.stdout)
     .catch(() => 'n/a');
-  await rollback();
-  return { ok: false, steps, error: `unit ${paths.unit} 未进入 active 状态`, rolledBack: true, journal: journal.slice(0, 500) };
+  const rolledBack = await rollback();
+  return { ok: false, steps, error: `unit ${paths.unit} 未进入 active 状态`, rolledBack, journal: journal.slice(0, 500) };
 }

@@ -29,6 +29,7 @@ import type { Server } from '../services/types';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { ServerFormModal } from '../components/ServerFormModal';
 import { DeployProgressModal } from '../components/DeployProgressModal';
+import { DeployResultModal } from '../components/DeployResultModal';
 import { BatchNodesModal } from '../components/BatchNodesModal';
 import { CertModal } from '../components/CertModal';
 import { EmptyState } from '../components/EmptyState';
@@ -50,6 +51,9 @@ export function ServersPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployResults, setDeployResults] = useState<import('../services/types').DeployAllResult[] | null>(null);
+  /** 单机/单核心部署结果弹窗(失败时必须让用户看见步骤与回滚结果) */
+  const [deployResultOpen, setDeployResultOpen] = useState(false);
+  const [deployResultTitle, setDeployResultTitle] = useState('');
   const [progressJobId, setProgressJobId] = useState<string | null>(null);
   const [progressOpen, setProgressOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
@@ -85,6 +89,15 @@ export function ServersPage() {
       setDeployResults([r]);
       const ok = r.singbox?.ok && (!r.xray || r.xray.ok || r.xray.skipped);
       if (ok) message.success(`${record.name} 部署完成`);
+      else {
+        // 失败必须可见:失败原因 + 逐步步骤(含回滚结果)在结果弹窗里
+        message.error({
+          content: `${record.name} 部署失败:${r.singbox?.error ?? r.xray?.error ?? '未知原因'}`,
+          duration: 8,
+        });
+        setDeployResultTitle(`${record.name} 部署结果`);
+        setDeployResultOpen(true);
+      }
       reload();
     } catch {
       // 错误提示由 api 层统一弹出
@@ -100,7 +113,13 @@ export function ServersPage() {
       const r = await api.deployServerCore(record.id, core);
       setDeployResults([r]);
       const coreRes = core === 'singbox' ? r.singbox : r.xray;
-      if (coreRes?.ok) message.success(`${record.name} ${core === 'singbox' ? 'sing-box' : 'xray'} 部署完成`);
+      const label = core === 'singbox' ? 'sing-box' : 'xray';
+      if (coreRes?.ok) message.success(`${record.name} ${label} 部署完成`);
+      else {
+        message.error({ content: `${record.name} ${label} 部署失败:${coreRes?.error ?? '未知原因'}`, duration: 8 });
+        setDeployResultTitle(`${record.name} · ${label} 部署结果`);
+        setDeployResultOpen(true);
+      }
       reload();
     } catch {
       // 错误提示由 api 层统一弹出
@@ -477,6 +496,12 @@ export function ServersPage() {
         snis={snis}
         onClose={() => setBatchOpen(false)}
         onDone={reload}
+      />
+      <DeployResultModal
+        open={deployResultOpen}
+        results={deployResults ?? []}
+        title={deployResultTitle}
+        onClose={() => setDeployResultOpen(false)}
       />
       <DeployProgressModal
         open={progressOpen}
