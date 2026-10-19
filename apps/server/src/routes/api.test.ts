@@ -144,6 +144,17 @@ describe('api integration (fastify.inject)', () => {
       tgBotTokenSet: false,
       tgChatId: '',
     });
+
+    // slug 是订阅的唯一凭据(免鉴权端点):太短等于可枚举
+    const shortSlug = await app.inject({ method: 'PUT', url: '/api/settings', headers: auth, payload: { subSlug: 'abc' } });
+    expect(shortSlug.statusCode).toBe(400);
+
+    // 订阅内容含节点凭据 → 不许中间层缓存
+    const sub = await app.inject({ method: 'GET', url: '/sub/singbox/my-slug_1' });
+    expect(sub.statusCode).toBe(200);
+    expect(sub.headers['cache-control']).toBe('no-store');
+    const badSub = await app.inject({ method: 'GET', url: '/sub/singbox/wrong-slug' });
+    expect(badSub.statusCode).toBe(404);
   });
 
   it('port whitelist (NAT) gates node/forward ports + batch preview', async () => {

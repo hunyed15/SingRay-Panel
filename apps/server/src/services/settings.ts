@@ -113,6 +113,8 @@ export function putSettings(
   if (b.subSlug !== undefined) {
     const raw = String(b.subSlug || '');
     if (!/^[a-zA-Z0-9_-]+$/.test(raw)) throw new HttpError(400, 'slug 仅允许字母/数字/下划线/连字符');
+    // 订阅是免鉴权端点:slug 就是唯一凭据,太短等于可枚举
+    if (raw.length < 8) throw new HttpError(400, 'slug 至少 8 位(订阅地址免鉴权,slug 即凭据)');
     setSetting(db, 'sub_slug', raw);
   }
   if (b.singboxRealityIp !== undefined) setSetting(db, REALITY_IP_KEYS.singbox, b.singboxRealityIp ? '1' : '0');

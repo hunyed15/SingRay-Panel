@@ -177,6 +177,7 @@ export function SettingsPage() {
                   rules={[
                     { required: true, message: '请输入 slug' },
                     { pattern: /^[a-zA-Z0-9_-]+$/, message: '仅允许字母/数字/下划线/连字符' },
+                    { min: 8, message: '至少 8 位(订阅地址免鉴权,slug 即凭据)' },
                   ]}
                   style={{ marginBottom: 8 }}
                 >
