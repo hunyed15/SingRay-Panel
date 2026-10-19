@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { migrate } from '../db/client.js';
 import { encryptSecret } from './creds.js';
-import { planBatchForward, executeBatchForward, type BatchInput } from './forwardBatch.js';
+import { planBatchForward, executeBatchForward, type BatchInput, type BatchPlan } from './forwardBatch.js';
 
 interface Fixture {
   db: DatabaseSync;
@@ -195,6 +195,78 @@ describe('forward batch: execution', () => {
     }[];
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ entry_port: 32679, include_in_sub: 1, core: 'singbox', auto: 0, note: '一键添加' });
+    f.db.close();
+  });
+});
+
+describe('forward batch: 预览端口 = 创建端口(P1-14)', () => {
+  it('无白名单入口机:两次计划一致,且与实际创建的一致', async () => {
+    const f = fixture();
+    const input: BatchInput = {
+      entryServerIds: [f.freeEntry],
+      targets: [{ type: 'singbox', id: 1 }, { type: 'xray', id: 1 }],
+    };
+    const portsOf = (p: BatchPlan) => p.items.filter((i) => i.action === 'create').map((i) => i.entryPort);
+    const first = portsOf(planBatchForward(f.db, input));
+    const second = portsOf(planBatchForward(f.db, input));
+    expect(first).toHaveLength(2);
+    expect(second).toEqual(first); // 旧实现两次都是 Math.random,必然不同
+
+    const applied: number[] = [];
+    const r = await executeBatchForward(f.db, input, async (_c, spec) => {
+      applied.push(spec.entryPort);
+    });
+    expect(applied).toEqual(first);
+    expect(r.created).toHaveLength(2);
+    f.db.close();
+  });
+});
+
+describe('forward batch: 可达性(P1-13)', () => {
+  it('v4-only 入口机 x v6-only 落地机 → 跳过并说明要走两跳', () => {
+    const f = fixture();
+    f.db.prepare("UPDATE servers SET host = '2607:8140::1', ip_stack = 'v6' WHERE id = ?").run(f.landing);
+    const plan = planBatchForward(f.db, { entryServerIds: [f.freeEntry], targets: [{ type: 'singbox', id: 1 }] });
+    expect(plan.createCount).toBe(0);
+    expect(plan.items[0].reason).toContain('两跳');
+    f.db.close();
+  });
+
+  it('落地机是域名时不按字面判族(可能解析到 v6),不误拦', () => {
+    const f = fixture();
+    f.db.prepare("UPDATE servers SET host = 'edge.example.com' WHERE id = ?").run(f.landing);
+    f.db.prepare("UPDATE servers SET ip_stack = 'v6' WHERE id = ?").run(f.freeEntry);
+    const plan = planBatchForward(f.db, { entryServerIds: [f.freeEntry], targets: [{ type: 'singbox', id: 1 }] });
+    expect(plan.createCount).toBe(1);
+    f.db.close();
+  });
+
+  it('栈未知(老数据)不拦,避免把正常创建全挡掉', () => {
+    const f = fixture();
+    f.db.prepare("UPDATE servers SET ip_stack = 'unknown' WHERE id = ?").run(f.freeEntry);
+    const plan = planBatchForward(f.db, { entryServerIds: [f.freeEntry], targets: [{ type: 'singbox', id: 1 }] });
+    expect(plan.createCount).toBe(1);
+    f.db.close();
+  });
+});
+
+describe('forward batch: 端口用尽文案(P1-15)', () => {
+  it('列出占用端口的规则,并说明端口号全链路共享', () => {
+    const f = fixture();
+    f.db
+      .prepare(
+        `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism, auto)
+         VALUES ('手工', ?, ?, 'port', 0, 32679, 443, 'socat', 0)`,
+      )
+      .run(f.natEntry, f.landing);
+    const plan = planBatchForward(f.db, {
+      entryServerIds: [f.natEntry],
+      targets: [{ type: 'singbox', id: 1 }, { type: 'singbox', id: 2 }, { type: 'xray', id: 1 }],
+    });
+    expect(plan.createCount).toBe(2); // 32679 被占,只剩 32680/32681
+    const skipped = plan.items.find((i) => i.action === 'skip');
+    expect(skipped?.reason).toContain('32679(NAT-A 的中转规则)');
+    expect(skipped?.reason).toContain('全链路共享');
     f.db.close();
   });
 });

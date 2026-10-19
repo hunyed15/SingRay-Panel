@@ -715,6 +715,8 @@ export function PortForwardsPage() {
           layout="vertical"
           requiredMark={false}
           initialValues={{ entryServerIds: [], targetKeys: [], includeInSub: true }}
+          // 改选后作废旧预览:否则「创建 N 条」会按旧 plan 的条目数与端口下发
+          onValuesChange={() => setBatchPlan(null)}
         >
           <Form.Item
             name="entryServerIds"

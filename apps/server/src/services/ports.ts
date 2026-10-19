@@ -1,7 +1,12 @@
 // 端口分配与唯一性校验(移植自旧 ports.js,同时覆盖 nodes/xray_nodes 两张表)
 import type { DatabaseSync } from 'node:sqlite';
+import { createHash } from 'node:crypto';
 import { HttpError } from './errors.js';
-import { parsePortAllow, containsPort, describePortRanges, type PortRange } from './portAllow.js';
+import { parsePortAllow, containsPort, describePortRanges, expandRanges, type PortRange } from './portAllow.js';
+
+/** 随机/派生分配的范围 */
+const PORT_MIN = 20000;
+const PORT_MAX = 65000;
 
 /** 常见代理/Web 端口黑名单(避免明显指纹),其余全随机 */
 const AVOID = new Set([
@@ -10,7 +15,7 @@ const AVOID = new Set([
 ]);
 
 /** 完全随机分配端口(默认 20000-65000,避开已用与常见端口,防 GFW 按顺序规律封) */
-export function randomFreePort(usedPorts: number[], min = 20000, max = 65000): number {
+export function randomFreePort(usedPorts: number[], min = PORT_MIN, max = PORT_MAX): number {
   const used = new Set(usedPorts);
   for (let i = 0; i < 500; i++) {
     const p = min + Math.floor(Math.random() * (max - min + 1));
@@ -20,6 +25,50 @@ export function randomFreePort(usedPorts: number[], min = 20000, max = 65000): n
     if (!used.has(p) && !AVOID.has(p)) return p;
   }
   return min;
+}
+
+/**
+ * 确定性端口分配:用 seed 派生起点,再顺序找空位。
+ * 「一键添加」的预览与创建是两次独立请求,共用同一个 seed 与同一份 DB 快照
+ * 才能得到同一批端口(旧实现两次都调 Math.random,预览报的端口和实际创建的必然不同)。
+ * 仍然避开 AVOID 黑名单,并且不取全局最小端口 —— 保留"不按顺序分配"的性质。
+ */
+export function pickPortDerived(usedPorts: number[], seed: string, min = PORT_MIN, max = PORT_MAX): number {
+  const used = new Set(usedPorts);
+  const span = max - min + 1;
+  const hash = createHash('sha256').update(seed).digest();
+  const start = min + (hash.readUInt32BE(0) % span);
+  for (let i = 0; i < span; i++) {
+    const p = min + ((start - min + i) % span);
+    if (!used.has(p) && !AVOID.has(p)) return p;
+  }
+  return randomFreePort([...used], min, max);
+}
+
+/**
+ * 端口被谁占用。端口号在全链路是**共享标识**(中转机要复用同一个端口号),
+ * 所以"白名单被占满"往往不是这台机器的问题 —— 报错必须指出占用方。
+ */
+export function describePortHolders(db: DatabaseSync, ports: number[], limit = 3): string {
+  const out: string[] = [];
+  for (const p of ports.slice(0, limit)) {
+    const node = db
+      .prepare(
+        `SELECT s.name AS name FROM servers s WHERE s.id IN (
+           SELECT server_id FROM nodes WHERE listen_port = ?
+           UNION SELECT server_id FROM xray_nodes WHERE listen_port = ?) LIMIT 1`,
+      )
+      .get(p, p) as { name: string } | undefined;
+    if (node) {
+      out.push(`${p}(${node.name} 的节点)`);
+      continue;
+    }
+    const rule = db
+      .prepare('SELECT s.name AS name FROM port_forwards f JOIN servers s ON s.id = f.entry_server_id WHERE f.entry_port = ? LIMIT 1')
+      .get(p) as { name: string } | undefined;
+    if (rule) out.push(`${p}(${rule.name} 的中转规则)`);
+  }
+  return out.join('、');
 }
 
 export interface PortCheckOpts {
@@ -98,19 +147,21 @@ export function pickPortFromRanges(usedPorts: number[], ranges: PortRange[]): nu
 
 /**
  * 为某台机器分配端口。
- * 无白名单 → 保持原有「全局随机」策略(避免按序分配被按规律封端口);
- * 有白名单 → 取白名单内最小可用端口:端口段通常很小,确定性分配让「一键添加」的
- * 预览端口与实际创建端口一致。
+ * 有白名单 → 取白名单内最小可用端口(端口段很小,确定性分配让预览=创建);
+ * 无白名单 → 用 seed 派生的确定性随机(同 seed 同结果,仍不按顺序分配)。
  */
-export function allocatePortForServer(db: DatabaseSync, serverId: number): number {
+export function allocatePortForServer(db: DatabaseSync, serverId: number, seed?: string): number {
   const ranges = serverPortRanges(db, serverId);
   const used = globallyUsedPorts(db);
-  if (ranges.length === 0) return randomFreePort(used);
+  if (ranges.length === 0) return pickPortDerived(used, seed ?? `server:${serverId}`);
   const port = pickPortFromRanges(used, ranges);
   if (port === null) {
+    const expanded = expandRanges(ranges);
+    const holders = expanded ? describePortHolders(db, expanded) : '';
     throw new HttpError(
       400,
-      `该机器的可用端口已用尽(白名单 ${describePortRanges(ranges)},这些端口已被其他节点/规则占用)`,
+      `该机器的可用端口已用尽(白名单 ${describePortRanges(ranges)})` +
+        (holders ? `:${holders} 已占用 —— 端口号在全链路共享,别的机器占了同一端口号也用不了` : ''),
     );
   }
   return port;

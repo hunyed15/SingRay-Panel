@@ -7,6 +7,8 @@ import {
   isPortAllowedOnServer,
   assertPortAllowedOnServer,
   pickPortFromRanges,
+  pickPortDerived,
+  describePortHolders,
   allocatePortForServer,
 } from './ports.js';
 
@@ -91,6 +93,32 @@ describe('ports: allocation inside the whitelist', () => {
     const port = allocatePortForServer(db, 1);
     expect(port).toBeGreaterThanOrEqual(20000);
     expect(port).toBeLessThanOrEqual(65000);
+    db.close();
+  });
+
+  it('deterministic pick: same seed → same port (preview == create)', () => {
+    const used = [20000, 20001];
+    expect(pickPortDerived(used, '1|singbox|7')).toBe(pickPortDerived(used, '1|singbox|7'));
+    expect(pickPortDerived(used, '1|singbox|7')).not.toBe(pickPortDerived(used, '1|singbox|8'));
+    const p = pickPortDerived(used, 'seed-x');
+    expect(used).toEqual([20000, 20001]); // 不改动入参
+    expect(used).not.toContain(p); // 避开已用端口
+  });
+
+  it('unrestricted machine allocates deterministically too', () => {
+    const db = makeDb('');
+    expect(allocatePortForServer(db, 1, 'server:1')).toBe(allocatePortForServer(db, 1, 'server:1'));
+    db.close();
+  });
+
+  it('exhaustion message names who holds the ports (端口号全链路共享)', () => {
+    const db = makeDb('32679-32680');
+    db.prepare("INSERT INTO servers (name, host, role) VALUES ('JP','1.2.3.4','landing')").run();
+    db.prepare("INSERT INTO nodes (name, server_id, protocol, listen_port) VALUES ('jp-1',2,'vless',32679)").run();
+    db.prepare("INSERT INTO nodes (name, server_id, protocol, listen_port) VALUES ('jp-2',2,'vless',32680)").run();
+    expect(() => allocatePortForServer(db, 1)).toThrow(/32679\(JP 的节点\)/);
+    expect(() => allocatePortForServer(db, 1)).toThrow(/全链路共享/);
+    expect(describePortHolders(db, [32679, 99999])).toBe('32679(JP 的节点)');
     db.close();
   });
 });

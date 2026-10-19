@@ -4,20 +4,21 @@
 // 区别只在:端口从入口机的可用端口白名单里取、逐条给出跳过原因、机器侧失败回滚该条。
 //
 // 端口分配规则:
-//   - 无白名单 → 沿用全局随机(与原逻辑一致,避免按序分配被按规律封)
 //   - 有白名单 → 白名单内最小可用端口(确定性:预览端口 = 实际创建端口)
+//   - 无白名单 → 以(入口机,节点)为种子的确定性分配(同样是预览 = 实际)
 
 import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from './errors.js';
 import { serverConn } from './conn.js';
 import { applyForward, type ForwardSpec } from '../core/forward/index.js';
 import {
+  describePortHolders,
   globallyUsedPorts,
+  pickPortDerived,
   pickPortFromRanges,
-  randomFreePort,
   serverPortRanges,
 } from './ports.js';
-import { describePortRanges } from './portAllow.js';
+import { expandRanges, describePortRanges } from './portAllow.js';
 import type { Row } from './row.js';
 
 export type BatchCore = 'singbox' | 'xray';
@@ -166,6 +167,20 @@ export function planBatchForward(db: DatabaseSync, input: BatchInput): BatchPlan
         skip('节点就在该入口机上,无需中转');
         continue;
       }
+      // 可达性:入口机与落地机的 IP 栈不匹配时,直连规则建了也连不通(拓扑引擎会改走两跳)。
+      // 只对**字面地址**判定:域名落在哪一族要看 DNS,不能凭字面猜,否则会误拦。
+      const landingHost = String(node.landing_client_host || node.landing_host || '');
+      const entryStack = String(entry.ip_stack ?? 'unknown');
+      const landingIsV6 = landingHost.includes(':');
+      const landingIsV4 = /^\d+\.\d+\.\d+\.\d+$/.test(landingHost);
+      const mismatch = (entryStack === 'v4' && landingIsV6) || (entryStack === 'v6' && landingIsV4);
+      if (mismatch) {
+        skip(
+          `入口机只有 ${entryStack === 'v4' ? 'IPv4' : 'IPv6'},落地机是 ${landingIsV6 ? 'IPv6' : 'IPv4'} 地址,` +
+            '直连规则必然不通 —— 请用「拓扑自动规则」经双栈中间机两跳',
+        );
+        continue;
+      }
       if (hasRuleForNode(db, entry.id, target)) {
         skip('该入口机已有此节点的中转规则');
         continue;
@@ -173,9 +188,14 @@ export function planBatchForward(db: DatabaseSync, input: BatchInput): BatchPlan
 
       const port = ranges.length
         ? pickPortFromRanges([...used], ranges)
-        : randomFreePort([...used]);
+        : pickPortDerived([...used], `${entry.id}|${target.type}|${target.id}`);
       if (port === null) {
-        skip(`该入口机可用端口已用尽(白名单 ${describePortRanges(ranges)})`);
+        const expanded = expandRanges(ranges);
+        const holders = expanded ? describePortHolders(db, expanded) : '';
+        skip(
+          `该入口机可用端口已用尽(白名单 ${describePortRanges(ranges)})` +
+            (holders ? `:${holders} 已占用 —— 端口号在全链路共享,别的机器占了同一端口号也用不了` : ''),
+        );
         continue;
       }
       used.add(port);

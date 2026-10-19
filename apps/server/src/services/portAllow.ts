@@ -83,6 +83,12 @@ export function portAllowCount(ranges: PortRange[]): number {
   return ranges.reduce((sum, r) => sum + (r.end - r.start + 1), 0);
 }
 
+/** 展开成端口列表(用于「端口被谁占用」的说明);超过 cap 返回 null —— 白名单通常很小 */
+export function expandRanges(ranges: PortRange[], cap = 200): number[] | null {
+  if (portAllowCount(ranges) > cap) return null;
+  return ranges.flatMap((r) => Array.from({ length: r.end - r.start + 1 }, (_, i) => r.start + i));
+}
+
 /** 紧凑展示:`32679-32699,30000`;区间过多时截断,避免错误信息过长 */
 export function describePortRanges(ranges: PortRange[], maxParts = 4): string {
   const parts = ranges.map((r) => (r.start === r.end ? String(r.start) : `${r.start}-${r.end}`));
