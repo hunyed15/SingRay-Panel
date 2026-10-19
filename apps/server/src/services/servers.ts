@@ -61,6 +61,8 @@ export interface ServerInput {
    * 约束该机的节点监听端口与作为中转入口时的入口端口。
    */
   portAllow?: string | null;
+  /** 改角色会重建凭据:必须显式确认(见 updateServer) */
+  confirmRotateCredentials?: boolean;
 }
 
 /** 校验白名单格式(非法格式直接 400,而不是等到分配端口时才失败) */
@@ -206,6 +208,14 @@ export function updateServer(db: DatabaseSync, id: number, b: ServerUpdateInput)
 
   // 角色变更:重建机器级凭据(relay ↔ landing)
   if (nextRole !== row.role) {
+    // 这会换掉 Reality 密钥 / Shadowsocks 密码 —— 该机器上所有客户端订阅链接立即失效,
+    // 必须由调用方显式确认(旧实现静默重建,用户只看到"节点全挂了")
+    if (b.confirmRotateCredentials !== true) {
+      throw new HttpError(
+        400,
+        '切换角色会重建该机器的凭据(Reality 密钥 / Shadowsocks 密码),已有的订阅链接会全部失效;确认请重新提交并带 confirmRotateCredentials: true',
+      );
+    }
     db.prepare('DELETE FROM relay_settings WHERE server_id = ?').run(id);
     db.prepare('DELETE FROM landing_settings WHERE server_id = ?').run(id);
     createRoleSettings(db, id, nextRole);

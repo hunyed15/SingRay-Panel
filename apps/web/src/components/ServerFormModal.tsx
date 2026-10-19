@@ -153,6 +153,26 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
         if (!isEdit || secret) base.sshAuthSecret = secret;
       }
       if (isEdit) {
+        // 改角色会重建机器凭据(Reality 密钥 / ss 密码)→ 该机订阅链接全部失效,先让用户确认
+        if (record && values.role !== record.role) {
+          const ok = await new Promise<boolean>((resolve) => {
+            Modal.confirm({
+              title: '确认切换角色?',
+              content:
+                '该机器会重新生成凭据(Reality 密钥 / Shadowsocks 密码),已发放的订阅链接将全部失效,需要重新分发。',
+              okText: '确认切换',
+              okButtonProps: { danger: true },
+              cancelText: '取消',
+              onOk: () => resolve(true),
+              onCancel: () => resolve(false),
+            });
+          });
+          if (!ok) {
+            setSaving(false);
+            return;
+          }
+          base.confirmRotateCredentials = true;
+        }
         await api.updateServer(record.id, base);
         message.success('已保存');
       } else {

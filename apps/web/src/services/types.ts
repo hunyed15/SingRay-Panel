@@ -106,6 +106,8 @@ export interface ServerInput {
   preferViaServerId?: number | null;
   /** 可用端口白名单(NAT 场景),如 `32679-32699,30000`;空串 = 不限制 */
   portAllow?: string;
+  /** 改角色会重建凭据:必须显式确认 */
+  confirmRotateCredentials?: boolean;
 }
 
 export interface TestResult {

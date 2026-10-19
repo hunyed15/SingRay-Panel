@@ -91,8 +91,15 @@ describe('servers service', () => {
     expect(rule.target_port).toBe(30022); // 旧实现会一直指向旧端口
   });
 
+  it('改角色会重建凭据:不确认就拒绝', () => {
+    expect(() => updateServer(db, landing.id, { role: 'relay' })).toThrow(/订阅链接会全部失效/);
+    // 未确认时不得改动任何凭据
+    expect(db.prepare('SELECT id FROM landing_settings WHERE server_id = ?').get(landing.id)).toBeTruthy();
+    expect(db.prepare('SELECT id FROM relay_settings WHERE server_id = ?').get(landing.id)).toBeUndefined();
+  });
+
   it('role change rebuilds role settings', () => {
-    const updated = updateServer(db, landing.id, { role: 'relay' });
+    const updated = updateServer(db, landing.id, { role: 'relay', confirmRotateCredentials: true });
     expect(updated.role).toBe('relay');
     expect(db.prepare('SELECT id FROM landing_settings WHERE server_id = ?').get(landing.id)).toBeUndefined();
     expect(db.prepare('SELECT id FROM relay_settings WHERE server_id = ?').get(landing.id)).toBeTruthy();
