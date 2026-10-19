@@ -30,6 +30,14 @@ describe('clash/mihomo subscription', () => {
     expect(yaml).toContain('password: "p+/="');
   });
 
+  it('keeps hysteria nodes (protocol name is hysteria, mihomo type is hysteria2)', () => {
+    const hy = { ...ss, id: 9, name: 'HY-1', protocol: 'hysteria', creds: { password: 'pw-hy' } } as NodeView;
+    const p = clashProxy(hy)!;
+    expect(p.type).toBe('hysteria2');
+    expect(p.password).toBe('pw-hy');
+    expect(toClashYaml([hy])).toContain('type: "hysteria2"');
+  });
+
   it('skips unsupported protocols (naive/tunnel/shadowtls)', () => {
     const yaml = toClashYaml([{ ...ss, name: 'n1', protocol: 'naive' }, { ...ss, name: 'n2', protocol: 'tunnel' }]);
     expect(yaml).not.toContain('n1');

@@ -197,6 +197,9 @@ export function planTopology(
       }
       const viaNames = path.map((id) => byId.get(id)?.name ?? `#${id}`).join('→');
       const mech = relay.relayMechanism;
+      // 落地机的白名单不含该端口 → 中转机连不到它(NAT 只映射白名单内的端口),
+      // 整条链路不可达。规则照建(方便日后改号),但不进订阅,否则订阅里多一条必然超时的线路。
+      const subscribable = allowsPort(landing, node.port);
 
       if (path.length === 2) {
         // 一跳:中转机直达落地机
@@ -210,7 +213,7 @@ export function planTopology(
           targetPort: node.port,
           mechanism: mech,
           core: node.type,
-          includeInSub: true,
+          includeInSub: subscribable,
         });
       } else {
         // 两跳:R → M → L
@@ -230,7 +233,7 @@ export function planTopology(
           via: viaNames,
           includeInSub: false,
         });
-        // 末跳规则:M → L(绑定节点,进订阅)
+        // 末跳规则:M → L(绑定节点;落地机端口不可达时不进订阅)
         add({
           name: `${mid.name}→${node.name}`,
           entryServerId: mid.id,
@@ -242,7 +245,7 @@ export function planTopology(
           mechanism: mid.relayMechanism,
           core: node.type,
           via: viaNames,
-          includeInSub: true,
+          includeInSub: subscribable,
         });
       }
     }

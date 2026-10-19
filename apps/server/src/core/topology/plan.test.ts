@@ -226,6 +226,17 @@ describe('topology: port whitelist (NAT machines)', () => {
     expect(skipped[0].machineId).toBe(3);
   });
 
+  it('落地机白名单不含节点端口:规则照建便于改号,但不进订阅', () => {
+    const natLanding = machines.map((m) => (m.id === 1 ? { ...m, portAllow: allow('30000-30010') } : m));
+    const bad = planTopology(natLanding, [{ id: 303, name: 'DK-w', type: 'xray', serverId: 1, port: 40000 }]);
+    expect(bad.rules).toHaveLength(1);
+    expect(bad.rules[0].includeInSub).toBe(false); // 否则订阅里多一条必然超时的线路
+
+    const okLanding = machines.map((m) => (m.id === 1 ? { ...m, portAllow: allow('40000-40010') } : m));
+    const ok = planTopology(okLanding, [{ id: 304, name: 'DK-v', type: 'xray', serverId: 1, port: 40000 }]);
+    expect(ok.rules[0].includeInSub).toBe(true);
+  });
+
   it('dedupes the same blocked machine across multiple relays', () => {
     const twoRelays = [...machines, M({ id: 6, name: 'CDT2', host: '9.9.9.9', role: 'relay', ipStack: 'v4' })];
     const natMid = twoRelays.map((m) => (m.id === 3 ? { ...m, portAllow: allow('32679-32699') } : m));

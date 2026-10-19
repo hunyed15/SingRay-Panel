@@ -99,7 +99,9 @@ export function clashProxy(v: NodeView): Record<string, YamlValue> | null {
       return { ...base, type: 'trojan', password: c.password, udp: true, sni: v.sni, 'skip-cert-verify': true };
     case 'shadowsocks':
       return { ...base, type: 'ss', cipher: c.method, password: c.password, udp: true };
-    case 'hysteria2':
+    // 协议名是 hysteria(templates.ts),mihomo 的 proxy type 叫 hysteria2 —— 旧代码按
+    // type 名当 case,导致所有 hysteria 节点落进 default 被整条丢掉
+    case 'hysteria':
       return { ...base, type: 'hysteria2', password: c.password, sni: v.sni, 'skip-cert-verify': true };
     case 'tuic':
       return { ...base, type: 'tuic', uuid: c.uuid, password: c.password, sni: v.sni, 'congestion-controller': 'bbr', 'skip-cert-verify': true, udp: true };
