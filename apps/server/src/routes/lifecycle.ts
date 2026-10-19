@@ -9,6 +9,7 @@ import { markDirty } from '../services/deployState.js';
 import { certStatus, issueCert, hasRealCert, dns01Available } from '../core/certs/acme.js';
 import { resolveCfToken } from '../services/settings.js';
 import { serverConn } from '../services/conn.js';
+import { withServerLock } from '../services/locks.js';
 import { decrypt } from '../core/crypto.js';
 import { config } from '../config.js';
 
@@ -92,7 +93,8 @@ export default async function lifecycleRoutes(app: FastifyInstance): Promise<voi
     }
     const conn = serverConn(getDb(), id);
     try {
-      const r = await issueCert(conn, domain, undefined, resolveCfToken(getDb()));
+      // 签证书会写证书文件并 reload sing-box / restart xray,必须与部署同机互斥
+      const r = await withServerLock(id, () => issueCert(conn, domain, undefined, resolveCfToken(getDb())));
       // 新证书要随部署进入核心配置 → 标记双核心待部署
       markDirty(getDb(), id, 'singbox');
       markDirty(getDb(), id, 'xray');
