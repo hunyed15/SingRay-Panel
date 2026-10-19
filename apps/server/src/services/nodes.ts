@@ -297,6 +297,11 @@ export function updateNode(db: DatabaseSync, id: number, b: NodeUpdateInput) {
     b.note ?? row.note,
     id,
   );
+  // 节点改监听端口 → 指向它的转发规则必须跟着改,否则规则还在往旧端口转发
+  // (手工规则 auto=0 不会被同步器重建,只能这里跟随)
+  if (port !== row.listen_port) {
+    db.prepare("UPDATE port_forwards SET target_port = ? WHERE target_node_type = 'singbox' AND target_node_id = ?").run(port, id);
+  }
   requestTopologySync(db);
   markDirty(db, row.server_id, 'singbox');
   return getNode(db, id);

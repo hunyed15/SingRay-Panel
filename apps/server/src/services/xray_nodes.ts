@@ -257,6 +257,10 @@ export function updateXrayNode(db: DatabaseSync, id: number, b: XrayNodeUpdateIn
     b.note ?? row.note,
     id,
   );
+  // 同 nodes:指向该节点的转发规则 target_port 跟随
+  if (port !== row.listen_port) {
+    db.prepare("UPDATE port_forwards SET target_port = ? WHERE target_node_type = 'xray' AND target_node_id = ?").run(port, id);
+  }
   return getXrayNode(db, id);
 }
 

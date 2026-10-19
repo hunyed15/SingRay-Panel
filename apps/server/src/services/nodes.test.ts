@@ -76,6 +76,21 @@ describe('servers service', () => {
     expect(() => createServer(db, { ...base, name: '香港 1 号', host: '10.0.0.6' })).not.toThrow();
   });
 
+  it('改节点端口时,指向它的手工转发规则 target_port 一起跟随', () => {
+    const node = createNode(db, { template: 'vmess-ws-tls', name: 'n-port', serverId: landing.id, port: 30011 });
+    db.prepare(
+      `INSERT INTO port_forwards (name, entry_server_id, landing_server_id, target_node_type, target_node_id, entry_port, target_port, mechanism)
+       VALUES ('手工规则', ?, ?, 'singbox', ?, 31001, ?, 'socat')`,
+    ).run(relay.id, landing.id, node.id, node.listen_port);
+
+    updateNode(db, node.id, { port: 30022 });
+
+    const rule = db.prepare('SELECT target_port FROM port_forwards WHERE target_node_id = ?').get(node.id) as {
+      target_port: number;
+    };
+    expect(rule.target_port).toBe(30022); // 旧实现会一直指向旧端口
+  });
+
   it('role change rebuilds role settings', () => {
     const updated = updateServer(db, landing.id, { role: 'relay' });
     expect(updated.role).toBe('relay');
