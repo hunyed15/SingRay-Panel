@@ -62,6 +62,7 @@ export function genRandomHex(bytes = 12): string {
 export function genPassword(length = 24): string {
   const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
   let out = '';
-  for (let i = 0; i < length; i++) out += charset[crypto.randomBytes(1)[0] % charset.length];
+  // randomInt 无取模偏差(旧实现 256 % 56,前 32 个字符概率略高)
+  for (let i = 0; i < length; i++) out += charset[crypto.randomInt(0, charset.length)];
   return out;
 }

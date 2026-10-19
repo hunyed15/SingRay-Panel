@@ -12,8 +12,9 @@
 - 批量探活与连通性测试
 
 ### 节点管理（双核心）
-- **SingBox**：VLESS+Reality、VMess+WS+TLS、Trojan、SS2022、Hysteria2、TUIC、ShadowTLS、Naive、SOCKS、HTTP、Tunnel
-- **Xray**：VLESS+Reality、VMess+WS+TLS、Trojan、Shadowsocks、SOCKS、HTTP
+- **SingBox**（10 个模板）：VLESS+Reality、VMess+WS+TLS、AnyTLS、Hysteria2、TUIC、ShadowTLS、Naive、SOCKS、HTTP、Tunnel
+- **Xray**（5 个模板）：VLESS+Reality、VMess+WS+TLS、VLESS+XHTTP、SOCKS、HTTP
+- 存量兼容：从旧面板迁移来的 Trojan / SS2022 / Xray-Shadowsocks 节点可以继续渲染、下发与对账，但**不再提供新建入口**
 - 模板制创建：端口分配、凭据、Reality 密钥对、自签证书全部自动生成
 - **一键批量添加**：按机器勾选模板批量建节点，同名自动跳过
 - Reality SNI 域名库（带实测可用性标注）
@@ -53,7 +54,7 @@ packages/shared 领域类型（前后端共用）
 tools/migrate   SQLite 迁移工具（行数对账报告）
 ```
 
-设计原则：配置生成为**纯函数 + golden 快照测试**（17 + 6 模板输出格式锁死）；部署为**事务状态机**；机器状态与面板认知可通过**对账**消除漂移。
+设计原则：配置生成为**纯函数 + golden 快照测试**（模板输出格式由快照锁死，改了格式必红）；部署为**事务状态机**；机器状态与面板认知可通过**对账**消除漂移。
 
 ## 安装
 

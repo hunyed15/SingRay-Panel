@@ -11,3 +11,7 @@ clash-sub.yaml
 # 一次性诊断/运维脚本(含生产凭据,禁止入库)
 apps/server/*.mjs
 apps/server/*.cjs
+
+# SQLite WAL 运行时文件
+*.db-shm
+*.db-wal

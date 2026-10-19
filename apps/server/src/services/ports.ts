@@ -1,6 +1,6 @@
 // 端口分配与唯一性校验(移植自旧 ports.js,同时覆盖 nodes/xray_nodes 两张表)
 import type { DatabaseSync } from 'node:sqlite';
-import { createHash } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { HttpError } from './errors.js';
 import { parsePortAllow, containsPort, describePortRanges, expandRanges, portAllowCount, type PortRange } from './portAllow.js';
 
@@ -18,7 +18,7 @@ const AVOID = new Set([
 export function randomFreePort(usedPorts: number[], min = PORT_MIN, max = PORT_MAX): number {
   const used = new Set(usedPorts);
   for (let i = 0; i < 500; i++) {
-    const p = min + Math.floor(Math.random() * (max - min + 1));
+    const p = randomInt(min, max + 1); // CSPRNG:端口就是对外指纹,不该可预测
     if (!used.has(p) && !AVOID.has(p)) return p;
   }
   for (let p = min; p <= max; p++) {

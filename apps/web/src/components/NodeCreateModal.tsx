@@ -31,7 +31,7 @@ interface FormValues {
   authPassword?: string;
 }
 
-/** 11 种 SingBox 模板(与后端 TEMPLATE_META 一致) */
+/** 10 种 SingBox 模板(与后端 TEMPLATE_META 一致) */
 const TEMPLATES: { key: NodeTemplate; title: string; desc: string }[] = [
   { key: 'vless-reality', title: 'VLESS + Reality', desc: '主力 · 借站 SNI · 零证书' },
   { key: 'vmess-ws-tls', title: 'VMess + WS + TLS', desc: '兼容老客户端 · 自签证书' },
