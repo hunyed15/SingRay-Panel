@@ -96,7 +96,8 @@ describe('api integration (fastify.inject)', () => {
     expect(toggled.json().enabled).toBe(0);
 
     const del = await app.inject({ method: 'DELETE', url: `/api/nodes/${node.id}`, headers: auth });
-    expect(del.json()).toEqual({ ok: true });
+    // 删除节点时会连带清理指向它的转发规则,回包里带清理条数
+    expect(del.json()).toEqual({ ok: true, removedForwards: 0 });
   });
 
   it('xray node create + purge via api', async () => {

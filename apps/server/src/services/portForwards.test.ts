@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { migrate } from '../db/client.js';
 import { encryptSecret } from './creds.js';
-import { deleteForward } from './portForwards.js';
+import { deleteForward, purgeRulesForNode } from './portForwards.js';
 import { resetServerLocks } from './locks.js';
 
 function seed(): DatabaseSync {
@@ -42,6 +42,39 @@ describe('deleteForward (机器侧与 DB 不能各说各话)', () => {
     expect(err.status).toBe(409);
     expect(err.message).toContain('记录已保留');
     expect(count(db)).toBe(1);
+    db.close();
+  });
+
+  it('purgeRulesForNode:清掉指向该节点的规则', async () => {
+    const db = seed();
+    db.prepare(
+      `INSERT INTO port_forwards (id,name,entry_server_id,landing_server_id,target_node_type,target_node_id,entry_port,target_port,mechanism)
+       VALUES (2,'R→n1',1,2,'singbox',77,31002,20001,'socat')`,
+    ).run();
+    const seen: number[] = [];
+    const r = await purgeRulesForNode(db, 'singbox', 77, async (_c, spec) => {
+      seen.push(spec.entryPort);
+    });
+    expect(r).toEqual({ removed: 1, errors: [] });
+    expect(seen).toEqual([31002]);
+    // 只删指向该节点的规则,别的规则不动
+    expect(count(db)).toBe(1);
+    db.close();
+  });
+
+  it('purgeRulesForNode:机器侧清不掉时保留规则并报错', async () => {
+    const db = seed();
+    db.prepare(
+      `INSERT INTO port_forwards (id,name,entry_server_id,landing_server_id,target_node_type,target_node_id,entry_port,target_port,mechanism)
+       VALUES (3,'R→n2',1,2,'singbox',88,31003,20002,'socat')`,
+    ).run();
+    const r = await purgeRulesForNode(db, 'singbox', 88, async () => {
+      throw new Error('ssh timeout');
+    });
+    expect(r.removed).toBe(0);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toContain('记录已保留');
+    expect(count(db)).toBe(2);
     db.close();
   });
 

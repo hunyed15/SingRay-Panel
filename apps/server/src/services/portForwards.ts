@@ -55,3 +55,29 @@ export async function deleteForward(
   db.prepare('DELETE FROM port_forwards WHERE id = ?').run(id);
   return { ok: true };
 }
+
+/**
+ * 删除指向某个节点的所有转发规则(节点删除时调用)。
+ * 一条失败不影响其余条目,但会把失败原因带回给调用方 —— 机器上残留的转发必须让人看见。
+ */
+export async function purgeRulesForNode(
+  db: DatabaseSync,
+  core: 'singbox' | 'xray',
+  nodeId: number,
+  apply: ApplyFn = (conn, spec, remove) => applyForward(conn, spec, remove),
+): Promise<{ removed: number; errors: string[] }> {
+  const rows = db
+    .prepare('SELECT id FROM port_forwards WHERE target_node_type = ? AND target_node_id = ?')
+    .all(core, nodeId) as { id: number }[];
+  const errors: string[] = [];
+  let removed = 0;
+  for (const row of rows) {
+    try {
+      await deleteForward(db, row.id, apply);
+      removed++;
+    } catch (err) {
+      errors.push(`规则 #${row.id}: ${(err as Error).message}`);
+    }
+  }
+  return { removed, errors };
+}

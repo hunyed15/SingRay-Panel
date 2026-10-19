@@ -11,6 +11,8 @@ import {
   deleteXrayNode,
   purgeXrayNodes,
 } from '../services/xray_nodes.js';
+import { purgeRulesForNode } from '../services/portForwards.js';
+import { HttpError } from '../services/errors.js';
 
 const createSchema = z.object({
   template: z.string().min(1, 'template 必填'),
@@ -62,8 +64,14 @@ export default async function xrayNodeRoutes(app: FastifyInstance): Promise<void
 
   app.delete('/:id', async (req) => {
     const { id } = idParam.parse(req.params);
-    deleteXrayNode(getDb(), id);
-    return { ok: true };
+    const db = getDb();
+    // 同 sing-box:先清指向该节点的转发规则,清理不掉就不删节点
+    const purge = await purgeRulesForNode(db, 'xray', id);
+    if (purge.errors.length > 0) {
+      throw new HttpError(409, `以下中转规则未能在机器侧清理,节点未删除:${purge.errors.join(';')}`);
+    }
+    deleteXrayNode(db, id);
+    return { ok: true, removedForwards: purge.removed };
   });
 
   // 清空所有 xray 节点(不触发部署)

@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { getDb } from '../db/client.js';
 import { listNodes, getNode, createNode, updateNode, toggleNode, deleteNode } from '../services/nodes.js';
+import { purgeRulesForNode } from '../services/portForwards.js';
+import { HttpError } from '../services/errors.js';
 
 const createSchema = z.object({
   template: z.string().min(1, 'template 必填'),
@@ -57,7 +59,14 @@ export default async function nodeRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/:id', async (req) => {
     const { id } = idParam.parse(req.params);
-    deleteNode(getDb(), id);
-    return { ok: true };
+    const db = getDb();
+    // 先清指向该节点的转发规则(机器侧 + DB);有清理不掉的就不删节点,
+    // 否则机器上留下永久的孤儿转发,而面板里已经看不到它了
+    const purge = await purgeRulesForNode(db, 'singbox', id);
+    if (purge.errors.length > 0) {
+      throw new HttpError(409, `以下中转规则未能在机器侧清理,节点未删除:${purge.errors.join(';')}`);
+    }
+    deleteNode(db, id);
+    return { ok: true, removedForwards: purge.removed };
   });
 }
