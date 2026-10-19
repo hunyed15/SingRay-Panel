@@ -135,7 +135,7 @@ export async function applyForward(
   // socat via systemd unit — explicit mechanism, created/removed idempotently
   const unit = `singray-fwd-${spec.entryPort}.service`;
   if (remove) {
-    await execFn(conn, `systemctl stop ${unit} --quiet 2>/dev/null; systemctl disable ${unit} --quiet 2>/dev/null; rm -f /etc/systemd/system/${unit}; systemctl daemon-reload --quiet`, { timeoutClass: 'config' });
+    await removeSocatUnit(conn, unit, execFn);
     return;
   }
   // 确保 socat 二进制存在(显式安装,不是降级)
@@ -160,6 +160,23 @@ export async function applyForward(
   const { writeFile } = await import('../ssh/executor.js');
   await writeFileFn(conn, `/etc/systemd/system/${unit}`, unitContent, execFn);
   await execFn(conn, `systemctl daemon-reload && systemctl enable --now ${unit}`, { timeoutClass: 'config' });
+}
+
+/** 对账修复:停用并删除一个孤儿 socat unit(applyForward 的 socat 删除也走这里) */
+export async function removeSocatUnit(conn: SshConn, unit: string, execFn: ExecFn = exec): Promise<void> {
+  await execFn(
+    conn,
+    `systemctl stop ${unit} --quiet 2>/dev/null; systemctl disable ${unit} --quiet 2>/dev/null; rm -f /etc/systemd/system/${unit}; systemctl daemon-reload --quiet`,
+    { timeoutClass: 'config' },
+  );
+}
+
+/**
+ * 对账修复:删除一条被判定为孤儿的 iptables 规则。
+ * 入参是 `iptables -t nat -S` 的原样输出(`-A PREROUTING …`),把开头的 -A 换成 -D 重放即可。
+ */
+export async function removeIptablesLine(conn: SshConn, line: string, execFn: ExecFn = exec): Promise<void> {
+  await execFn(conn, `iptables -t nat ${line.replace(/^-A\s+/, '-D ')}`, { timeoutClass: 'config' });
 }
 
 export interface ReconcileReport {

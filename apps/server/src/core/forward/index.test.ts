@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyForward, preflight, reconcile, type ForwardSpec } from './index.js';
+import { applyForward, preflight, reconcile, removeSocatUnit, removeIptablesLine, type ForwardSpec } from './index.js';
 import type { SshConn, ExecFn } from '../ssh/executor.js';
 
 const conn: SshConn = { serverId: 1, host: '10.0.0.1', sudo: false, readyTimeout: 5000 };
@@ -16,6 +16,24 @@ function recordingExec(responses: Record<string, string> = {}) {
   };
   return { calls, execFn };
 }
+
+describe('forward: 对账修复原语', () => {
+  it('removeSocatUnit 停用并删除 unit', async () => {
+    const { calls, execFn } = recordingExec();
+    await removeSocatUnit(conn, 'singray-fwd-31001.service', execFn);
+    const cmd = calls[0].cmd;
+    expect(cmd).toContain('systemctl stop singray-fwd-31001.service');
+    expect(cmd).toContain('rm -f /etc/systemd/system/singray-fwd-31001.service');
+    expect(cmd).toContain('daemon-reload');
+  });
+
+  it('removeIptablesLine 把 -S 输出的 -A 换成 -D 原样重放', async () => {
+    const { calls, execFn } = recordingExec();
+    const line = '-A PREROUTING -p tcp -m tcp --dport 31001 -m comment --comment singray:7 -j DNAT --to-destination 10.0.0.9:41001';
+    await removeIptablesLine(conn, line, execFn);
+    expect(calls[0].cmd).toBe('iptables -t nat -D PREROUTING -p tcp -m tcp --dport 31001 -m comment --comment singray:7 -j DNAT --to-destination 10.0.0.9:41001');
+  });
+});
 
 describe('forward: iptables (explicit mechanism)', () => {
   it('rejects a shell-ish landing host before touching the machine', async () => {

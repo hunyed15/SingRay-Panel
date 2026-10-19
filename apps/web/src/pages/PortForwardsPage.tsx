@@ -194,11 +194,28 @@ export function PortForwardsPage() {
     }
   };
 
-  const handleReconcile = async () => {
+  const reconcileDiff =
+    (reconcileReport?.missingIptables.length ?? 0) +
+    (reconcileReport?.missingSocat.length ?? 0) +
+    (reconcileReport?.orphanIptables.length ?? 0) +
+    (reconcileReport?.orphanSocat.length ?? 0);
+
+  const handleReconcile = async (fix = false) => {
     if (!reconcileServerId) return;
     setReconciling(true);
     try {
-      setReconcileReport(await api.reconcilePortForwards(reconcileServerId));
+      const r = await api.reconcilePortForwards(reconcileServerId, fix);
+      setReconcileReport(r);
+      if (fix && r.repaired) {
+        const { reapplied, removed, errors } = r.repaired;
+        const summary = `已重新下发 ${reapplied.length} 条,清理 ${removed.length} 条`;
+        if (errors.length) {
+          message.warning({ content: `${summary};${errors.length} 条失败:${errors[0]}`, duration: 8 });
+        } else {
+          message.success(summary);
+        }
+        reload();
+      }
     } catch {
       // 错误提示由 api 层统一弹出
     } finally {
@@ -899,30 +916,20 @@ export function PortForwardsPage() {
               onChange={setReconcileServerId}
               options={serverOptions(servers)}
             />
-            <Button type="primary" loading={reconciling} disabled={!reconcileServerId} onClick={handleReconcile}>
+            <Button type="primary" loading={reconciling} disabled={!reconcileServerId} onClick={() => handleReconcile()}>
               对账
             </Button>
+            {reconcileDiff > 0 && (
+              <Button danger loading={reconciling} onClick={() => handleReconcile(true)}>
+                修复差异
+              </Button>
+            )}
           </Flex>
           {reconcileReport && (
             <Alert
-              type={
-                reconcileReport.missingIptables.length ||
-                reconcileReport.missingSocat.length ||
-                reconcileReport.orphanIptables.length ||
-                reconcileReport.orphanSocat.length
-                  ? 'warning'
-                  : 'success'
-              }
+              type={reconcileDiff > 0 ? 'warning' : 'success'}
               showIcon
-              message={
-                reconcileReport.missingIptables.length +
-                  reconcileReport.missingSocat.length +
-                  reconcileReport.orphanIptables.length +
-                  reconcileReport.orphanSocat.length ===
-                0
-                  ? '✅ 机器规则与数据库一致'
-                  : '发现差异(机器侧以 DB 为准修复)'
-              }
+              message={reconcileDiff === 0 ? '✅ 机器规则与数据库一致' : '发现差异(点「修复差异」按 DB 修复机器侧)'}
               description={
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
                   {reconcileReport.missingIptables.length > 0 && (

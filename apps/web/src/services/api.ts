@@ -241,13 +241,15 @@ export interface ForwardReconcileReport {
   missingSocat: number[];
   orphanIptables: string[];
   orphanSocat: string[];
+  /** fix=true 时的修复结果 */
+  repaired?: { reapplied: number[]; removed: string[]; errors: string[] };
 }
 
-/** 对账:入口机实际规则 vs DB */
-export const reconcilePortForwards = (entryServerId: number): Promise<ForwardReconcileReport> =>
+/** 对账:入口机实际规则 vs DB;fix=true 时顺手修复(重新下发缺失项、清理孤儿规则) */
+export const reconcilePortForwards = (entryServerId: number, fix = false): Promise<ForwardReconcileReport> =>
   request<ForwardReconcileReport>('/api/port-forwards/reconcile', {
     method: 'POST',
-    body: { entryServerId },
+    body: { entryServerId, fix },
   });
 
 /** 一键添加:预览(端口按白名单分配,不落库) */
