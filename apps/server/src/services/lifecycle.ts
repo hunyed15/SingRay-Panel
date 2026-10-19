@@ -7,6 +7,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { config } from '../config.js';
 import { exec, writeFile } from '../core/ssh/executor.js';
 import { rowConn } from './conn.js';
+import { withServerLock } from './locks.js';
 import type { ExecFn, SshConn } from '../core/ssh/executor.js';
 import { decrypt } from '../core/crypto.js';
 import type { Row } from './row.js';
@@ -103,6 +104,17 @@ function getConn(db: DatabaseSync, serverId: number): { conn: SshConn; row: Row 
 }
 
 export async function serverLifecycle(
+  db: DatabaseSync,
+  serverId: number,
+  core: CoreKind,
+  action: LifecycleAction,
+  inject?: { execFn?: ExecFn; writeFileFn?: typeof writeFile },
+): Promise<{ ok: true; steps: string[] }> {
+  // 与部署/配置下发按机器互斥;部署内部会自动安装核心(那里重入本函数,走可重入分支)
+  return withServerLock(serverId, () => runLifecycle(db, serverId, core, action, inject));
+}
+
+async function runLifecycle(
   db: DatabaseSync,
   serverId: number,
   core: CoreKind,

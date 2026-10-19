@@ -4,6 +4,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { diffRules, loadMachines, loadRelayableNodes, planTopology, type DesiredRule } from './plan.js';
 import { serverConn } from '../../services/conn.js';
+import { withServerLock } from '../../services/locks.js';
 import { applyForward } from '../forward/index.js';
 import { recordRun } from '../alerts.js';
 import type { Row } from '../../services/row.js';
@@ -27,7 +28,9 @@ async function removeRule(
   try {
     // id 必须用真实行 id:iptables 规则的删除靠 --comment singray:<id> 匹配,
     // 传 0 会变成 singray:0,删不中任何规则(残留孤儿规则)
-    await applyForward(conn, { id: r.id, entryPort: r.entryPort, landingHost, targetPort: r.targetPort, mechanism: r.mechanism }, true);
+    await withServerLock(r.entryServerId, () =>
+      applyForward(conn, { id: r.id, entryPort: r.entryPort, landingHost, targetPort: r.targetPort, mechanism: r.mechanism }, true),
+    );
   } catch {
     // 机器侧删除失败不阻断 DB 清理(可用对账发现残留)
   }
@@ -71,7 +74,9 @@ export async function syncTopology(
       const landing = db.prepare('SELECT host, client_host FROM servers WHERE id = ?').get(d.landingServerId) as Row;
       const conn = serverConn(db, d.entryServerId);
       const landingHost = landing.client_host || landing.host;
-      await apply(conn, { id: rowId, entryPort: d.entryPort, landingHost, targetPort: d.targetPort, mechanism: d.mechanism }, false);
+      await withServerLock(d.entryServerId, () =>
+        apply(conn, { id: rowId, entryPort: d.entryPort, landingHost, targetPort: d.targetPort, mechanism: d.mechanism }, false),
+      );
       applied++;
     } catch (err) {
       errors.push(`${d.name}: ${(err as Error).message.slice(0, 100)}`);

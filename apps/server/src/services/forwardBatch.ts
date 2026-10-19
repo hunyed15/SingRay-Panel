@@ -11,6 +11,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from './errors.js';
 import { serverConn } from './conn.js';
 import { applyForward, type ForwardSpec } from '../core/forward/index.js';
+import { withServerLock } from './locks.js';
 import {
   describePortHolders,
   globallyUsedPorts,
@@ -251,13 +252,18 @@ export async function executeBatchForward(
     const rowId = Number(info.lastInsertRowid);
     try {
       const landing = db.prepare('SELECT host, client_host FROM servers WHERE id = ?').get(item.landingServerId) as Row;
-      await apply(serverConn(db, item.entryServerId), {
-        id: rowId,
-        entryPort: item.entryPort,
-        landingHost: landing.client_host || landing.host,
-        targetPort: item.targetPort,
-        mechanism: item.mechanism,
-      }, false);
+      const entryPort = item.entryPort; // 闭包里保持 number 收窄
+      const entryServerId = item.entryServerId;
+      // 与部署/其他下发按机器互斥:同一台入口机上并发写 iptables/unit 会互相踩
+      await withServerLock(entryServerId, () =>
+        apply(serverConn(db, entryServerId), {
+          id: rowId,
+          entryPort,
+          landingHost: landing.client_host || landing.host,
+          targetPort: item.targetPort,
+          mechanism: item.mechanism,
+        }, false),
+      );
       created.push(item);
     } catch (err) {
       db.prepare('DELETE FROM port_forwards WHERE id = ?').run(rowId);

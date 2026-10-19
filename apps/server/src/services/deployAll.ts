@@ -14,6 +14,7 @@ import { rowConn } from './conn.js';
 import type { SshConn } from '../core/ssh/executor.js';
 import { decrypt, encrypt, genRealityKeypair, genShortId, genSsPassword } from '../core/crypto.js';
 import { serverLifecycle } from './lifecycle.js';
+import { withServerLock } from './locks.js';
 import { clearDirtyCore } from './deployState.js';
 import { hasRealCert, certPaths } from '../core/certs/acme.js';
 import { config } from '../config.js';
@@ -180,6 +181,16 @@ export async function deployServerBothCores(
   serverId: number,
   inject?: { execFn?: typeof exec; writeFileFn?: typeof writeFile },
   /** 只部署其中一个核心(单机按核心下发);缺省两个都部署 */
+  only?: 'singbox' | 'xray',
+): Promise<MachineDeployResult> {
+  // 按机器串行:并发部署会各自 render→swap,后一个覆盖前一个,而两个都报成功
+  return withServerLock(serverId, () => deployBothCoresInner(db, serverId, inject, only));
+}
+
+async function deployBothCoresInner(
+  db: DatabaseSync,
+  serverId: number,
+  inject?: { execFn?: typeof exec; writeFileFn?: typeof writeFile },
   only?: 'singbox' | 'xray',
 ): Promise<MachineDeployResult> {
   const sbRow = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId) as Row | undefined;

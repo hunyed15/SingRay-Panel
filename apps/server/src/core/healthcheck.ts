@@ -5,6 +5,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import net from 'node:net';
 import { serverConn } from '../services/conn.js';
+import { withServerLock } from '../services/locks.js';
 import { exec, shQuote } from './ssh/executor.js';
 import { sendAlert } from './alerts.js';
 import type { Row } from '../services/row.js';
@@ -66,6 +67,16 @@ export async function checkServer(
   db: DatabaseSync,
   serverId: number,
   /** 注入点:测试替换 SSH 与 TCP 探活 */
+  deps: { execFn?: typeof exec; probe?: typeof tcpProbe } = {},
+): Promise<MachineHealth> {
+  // 与部署/下发按机器互斥:否则会在 swap 与 restart 之间读到半成品状态并误报告警。
+  // 只等 30s:等不到就跳过这一轮(健康检查是周期任务,没必要排在部署后面)。
+  return withServerLock(serverId, () => checkServerInner(db, serverId, deps), { waitMs: 30_000 });
+}
+
+async function checkServerInner(
+  db: DatabaseSync,
+  serverId: number,
   deps: { execFn?: typeof exec; probe?: typeof tcpProbe } = {},
 ): Promise<MachineHealth> {
   const execFn = deps.execFn ?? exec;
