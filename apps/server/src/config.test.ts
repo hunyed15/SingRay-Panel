@@ -57,3 +57,34 @@ describe('config weak-secret guard', () => {
     expect(mod.config.jwtSecret).toBe('c'.repeat(64));
   });
 });
+
+describe('config 核心版本(D9-04:默认固定,不追 latest)', () => {
+  const SECRETS = { PANEL_JWT_SECRET: 'c'.repeat(64), PANEL_APP_SECRET: 'd'.repeat(64) };
+
+  it('未设置时用固定版本', async () => {
+    const mod = await loadConfigWith({
+      PANEL_ENV_FILE: MISSING_ENV_FILE,
+      SINGBOX_VERSION: undefined,
+      XRAY_VERSION: undefined,
+      ...SECRETS,
+    });
+    expect(mod.config.singboxVersion).toBe('1.13.18');
+    expect(mod.config.xrayVersion).toBe('24.11.30');
+  });
+
+  it('显式写 latest 仍然允许(想要自动追新版的人自己承担)', async () => {
+    const mod = await loadConfigWith({ PANEL_ENV_FILE: MISSING_ENV_FILE, SINGBOX_VERSION: 'latest', ...SECRETS });
+    expect(mod.config.singboxVersion).toBe('latest');
+  });
+
+  it('版本号写错 → 拒绝启动(比下载 404 好排查)', async () => {
+    await expect(
+      loadConfigWith({ PANEL_ENV_FILE: MISSING_ENV_FILE, XRAY_VERSION: 'v24', ...SECRETS }),
+    ).rejects.toThrow(/不是合法版本号/);
+  });
+
+  it('接受带 v 前缀的版本号并归一', async () => {
+    const mod = await loadConfigWith({ PANEL_ENV_FILE: MISSING_ENV_FILE, SINGBOX_VERSION: 'v1.13.18', ...SECRETS });
+    expect(mod.config.singboxVersion).toBe('1.13.18');
+  });
+});

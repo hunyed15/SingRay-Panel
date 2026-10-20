@@ -25,7 +25,8 @@ describe('baseline migration', () => {
     db.close();
   });
 
-  it('迁移前留一份一致性快照(迁移失败才有回退点)', () => {
+  // 真实文件 IO(VACUUM INTO 15 个迁移的库):Windows + 杀软下偶尔超过默认 5s
+  it('迁移前留一份一致性快照(迁移失败才有回退点)', { timeout: 30_000 }, () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'singray-migrate-'));
     const dbPath = path.join(dir, 'panel.db');
     const db = new DatabaseSync(dbPath);

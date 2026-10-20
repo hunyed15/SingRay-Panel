@@ -8,6 +8,7 @@ import { config } from '../config.js';
 import { exec, writeFile } from '../core/ssh/executor.js';
 import { rowConn } from './conn.js';
 import { withServerLock } from './locks.js';
+import { PINNED_SINGBOX_VERSION, PINNED_XRAY_VERSION } from '../core/versions.js';
 import type { ExecFn, SshConn } from '../core/ssh/executor.js';
 import { decrypt } from '../core/crypto.js';
 import type { Row } from './row.js';
@@ -15,8 +16,9 @@ import type { Row } from './row.js';
 export type CoreKind = 'singbox' | 'xray';
 export type LifecycleAction = 'install' | 'restart' | 'uninstall' | 'rollback';
 
-const SINGBOX_FALLBACK_VERSION = '1.13.18';
-const XRAY_FALLBACK_VERSION = '24.11.30';
+// 默认固定版本(与 config 默认值同源);只有显式设 SINGBOX_VERSION=latest 才会去查上游
+const SINGBOX_FALLBACK_VERSION = PINNED_SINGBOX_VERSION;
+const XRAY_FALLBACK_VERSION = PINNED_XRAY_VERSION;
 
 const SINGBOX_UNIT = (bin: string, cfg: string) => `[Unit]
 Description=sing-box
