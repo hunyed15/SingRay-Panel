@@ -5,6 +5,19 @@
  */
 import { message } from 'antd';
 import { clearToken, getToken, setToken } from './auth';
+import { z } from 'zod';
+import {
+  certOverviewSchema,
+  nodeSchema,
+  pendingDeploySchema,
+  portForwardSchema,
+  probeSchema,
+  serverSchema,
+  settingsSchema,
+  sniSchema,
+  systemStatusSchema,
+  xrayNodeSchema,
+} from './contracts';
 import type {
   AccountPatch,
   DeployAllResult,
@@ -102,13 +115,27 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   return parsed as T;
 }
 
-/** 列表接口:后端回了 `{error}` 或 HTML 时立刻报错,而不是把对象当数组用 */
-async function requestList<T>(path: string, opts: RequestOptions = {}): Promise<T[]> {
+/** 把一条响应按契约解析;失败时抛 bad_response 并指出是哪个字段 */
+function validate<T>(schema: z.ZodType<T>, data: unknown, what: string): T {
+  const r = schema.safeParse(data);
+  if (r.success) return r.data;
+  const issue = r.error.issues[0];
+  const at = issue?.path.join('.') || '(root)';
+  throw new ApiError(0, `${what}不符合约定:${at} ${issue?.message ?? ''}`.trim(), 'bad_response');
+}
+
+/** 对象接口:返回值同样要过契约 */
+async function requestValidated<T>(path: string, schema: z.ZodType<T>, opts: RequestOptions = {}): Promise<T> {
+  return validate(schema, await request<unknown>(path, opts), '后端返回的数据');
+}
+
+/** 列表接口:非数组 / 单条不符合契约都立刻报错,而不是把脏数据交给页面 */
+async function requestList<T>(path: string, schema: z.ZodType<T>, opts: RequestOptions = {}): Promise<T[]> {
   const data = await request<unknown>(path, opts);
   if (!Array.isArray(data)) {
     throw new ApiError(0, '后端返回的数据格式不正确(期望列表)', 'bad_response');
   }
-  return data as T[];
+  return data.map((item, i) => validate(schema, item, `列表第 ${i + 1} 项`));
 }
 
 // ---------- 认证 ----------
@@ -129,7 +156,7 @@ export const updateAccount = (payload: AccountPatch): Promise<{ username: string
 
 // ---------- 服务器 ----------
 
-export const getServers = (): Promise<Server[]> => requestList<Server>('/api/servers');
+export const getServers = (): Promise<Server[]> => requestList('/api/servers', serverSchema);
 
 export const createServer = (payload: ServerInput): Promise<Server> =>
   request<Server>('/api/servers', { method: 'POST', body: payload });
@@ -146,7 +173,7 @@ export const testServer = (id: number): Promise<TestResult> =>
 
 // ---------- SingBox 节点 ----------
 
-export const getNodes = (): Promise<NodeItem[]> => requestList<NodeItem>('/api/nodes');
+export const getNodes = (): Promise<NodeItem[]> => requestList('/api/nodes', nodeSchema);
 
 export const createNode = (payload: NodeCreateInput): Promise<NodeItem> =>
   request<NodeItem>('/api/nodes', { method: 'POST', body: payload });
@@ -166,7 +193,7 @@ export const testNode = (id: number): Promise<NodeTestResult> =>
 
 // ---------- Xray 节点 ----------
 
-export const getXrayNodes = (): Promise<XrayNodeItem[]> => requestList<XrayNodeItem>('/api/xray/nodes');
+export const getXrayNodes = (): Promise<XrayNodeItem[]> => requestList('/api/xray/nodes', xrayNodeSchema);
 
 export const createXrayNode = (payload: XrayNodeCreateInput): Promise<XrayNodeItem> =>
   request<XrayNodeItem>('/api/xray/nodes', { method: 'POST', body: payload });
@@ -185,7 +212,7 @@ export const testXrayNode = (id: number): Promise<NodeTestResult> =>
 
 // ---------- SNI 域名库 ----------
 
-export const getSnis = (): Promise<SniItem[]> => requestList<SniItem>('/api/snis');
+export const getSnis = (): Promise<SniItem[]> => requestList('/api/snis', sniSchema);
 
 export const createSni = (domain: string, note: string): Promise<SniItem> =>
   request<SniItem>('/api/snis', { method: 'POST', body: { domain, note } });
@@ -198,10 +225,10 @@ export const deleteSni = (id: number): Promise<{ ok: true }> =>
 
 // ---------- 设置 ----------
 
-export const getSettings = (): Promise<Settings> => request<Settings>('/api/settings');
+export const getSettings = (): Promise<Settings> => requestValidated('/api/settings', settingsSchema);
 
 export const setSlug = (subSlug: string): Promise<Settings> =>
-  request<Settings>('/api/settings', { method: 'PUT', body: { subSlug } });
+  requestValidated('/api/settings', settingsSchema, { method: 'PUT', body: { subSlug } });
 
 /** 更新订阅 Reality 地址模式等设置 */
 export const updateSettings = (
@@ -214,7 +241,7 @@ export const updateSettings = (
     tgBotToken?: string;
     tgChatId?: string;
   },
-): Promise<Settings> => request<Settings>('/api/settings', { method: 'PUT', body: patch });
+): Promise<Settings> => requestValidated('/api/settings', settingsSchema, { method: 'PUT', body: patch });
 
 /** 发送 Telegram 测试消息 */
 export const testTelegram = (): Promise<{ delivered: boolean }> =>
@@ -223,7 +250,7 @@ export const testTelegram = (): Promise<{ delivered: boolean }> =>
 // ---------- 中转规则 ----------
 
 export const getPortForwards = (): Promise<PortForwardItem[]> =>
-  requestList<PortForwardItem>('/api/port-forwards');
+  requestList('/api/port-forwards', portForwardSchema);
 
 export const createPortForward = (
   payload: PortForwardCreateInput,
@@ -292,7 +319,7 @@ export interface PendingDeployRow {
 
 /** 待部署清单(节点/证书变更未下发的机器) */
 export const getDeployPending = (): Promise<PendingDeployRow[]> =>
-  requestList<PendingDeployRow>('/api/deploy/pending');
+  requestList('/api/deploy/pending', pendingDeploySchema);
 
 export interface DeployJobMachine {
   serverId: number;
@@ -348,7 +375,7 @@ export interface CertOverviewRow {
 }
 
 /** 全机器证书状态聚合 */
-export const getCerts = (): Promise<CertOverviewRow[]> => requestList<CertOverviewRow>('/api/servers/certs');
+export const getCerts = (): Promise<CertOverviewRow[]> => requestList('/api/servers/certs', certOverviewSchema);
 
 export const getCertStatus = (id: number): Promise<CertStatusInfo> =>
   request<CertStatusInfo>(`/api/servers/${id}/cert-status`);
@@ -384,7 +411,7 @@ export interface SystemStatus {
 }
 
 /** 运维状态(调度器/备份/TG) */
-export const getSystemStatus = (): Promise<SystemStatus> => request<SystemStatus>('/api/system/status');
+export const getSystemStatus = (): Promise<SystemStatus> => requestValidated('/api/system/status', systemStatusSchema);
 
 /** 立即备份数据库 */
 export const runBackupNow = (): Promise<{ ok: true; file: string; size: number }> =>
@@ -497,7 +524,7 @@ export interface ProbeRow {
   checkedAt: string;
 }
 
-export const getProbes = (): Promise<ProbeRow[]> => requestList<ProbeRow>('/api/test/probes');
+export const getProbes = (): Promise<ProbeRow[]> => requestList('/api/test/probes', probeSchema);
 
 export const probeAll = (): Promise<{ checked: number; ok: number; failed: number }> =>
   request('/api/test/probe-all', { method: 'POST' });

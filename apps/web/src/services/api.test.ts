@@ -16,17 +16,55 @@ function jsonResponse(status: number, body: unknown): Response {
   } as unknown as Response;
 }
 
+/** 一个字段齐全的 Server 行(契约校验通过的最小样例) */
+const serverRow = {
+  id: 1,
+  name: 'HK1',
+  role: 'landing',
+  control: 'ssh',
+  host: '1.2.3.4',
+  clientHost: '',
+  sshPort: 22,
+  sshUser: 'root',
+  sshAuthType: 'password',
+  sshSudo: 0,
+  region: 'HK',
+  pingStatus: 'online',
+  singboxVersion: '1.13.18',
+  xrayVersion: '',
+  xrayPingStatus: 'unknown',
+  xrayLastSeen: null,
+  lastSeen: null,
+  jumpServerId: null,
+  ipStack: 'v4',
+  relayMechanism: 'socat',
+  preferViaServerId: null,
+  portAllow: '',
+};
+
 describe('api 客户端', () => {
   beforeEach(() => {
     vi.mocked(message.error).mockClear();
     window.history.pushState({}, '', '/login'); // 避免 401 分支触发真实跳转
   });
 
-  it('200 → 返回解析后的 body', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, [{ id: 1, name: 'HK1' }])));
+  it('200 → 按契约解析后返回', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, [serverRow])));
     const servers = await api.getServers();
-    expect(servers).toEqual([{ id: 1, name: 'HK1' }]);
+    expect(servers).toEqual([serverRow]);
     expect(message.error).not.toHaveBeenCalled();
+  });
+
+  it('响应字段不合约定 → bad_response,并指出是哪个字段(D4-04)', async () => {
+    const broken = { ...serverRow } as Record<string, unknown>;
+    delete broken.role;
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, [broken])));
+    const err = await api.getServers().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect((err as InstanceType<typeof ApiError>).code).toBe('bad_response');
+    expect((err as Error).message).toContain('role');
   });
 
   it('409 → 抛 ApiError(带状态码/后端 code/中文消息)并弹一次全局提示', async () => {
