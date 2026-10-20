@@ -66,8 +66,13 @@ cd SingRayPanel
 npm install
 cp .env.example .env    # 必须把两个密钥改成真实随机值,否则拒绝启动
 npm run dev             # server(3000) + web(5173);会自动加载仓库根的 .env
-npm test                # vitest 全量(含 golden 快照)
+npm test                # server(vitest + golden 快照) + web(jsdom 组件测试) + migrate
+npm run lint            # eslint(抓真问题,不做风格检查)
+npm run typecheck       # tsc --noEmit(server + web + migrate)
 ```
+
+架构与设计取舍见 [`docs/design.md`](docs/design.md);历次代码审查的发现与处理记录见
+[`docs/review/01-report-2026-10-19.md`](docs/review/01-report-2026-10-19.md)。
 
 `.env` 会被服务端自动加载（已存在的环境变量优先，等价于 systemd `EnvironmentFile` 的行为）。
 `PANEL_JWT_SECRET` / `PANEL_APP_SECRET` 仍是默认值或 `.env.example` 的占位符时，**进程直接拒绝启动**——这条守卫与监听地址无关（nginx 反代到 `127.0.0.1` 同样要求），因为用默认串可以离线伪造管理员令牌。
