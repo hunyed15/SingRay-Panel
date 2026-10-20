@@ -14,6 +14,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Row } from '../../services/row.js';
 import { containsPort, parsePortAllow, describePortRanges, type PortRange } from '../../services/portAllow.js';
+import { NOT_SUBSCRIBABLE_SINGBOX_SQL, NOT_SUBSCRIBABLE_XRAY_SQL } from '../../services/protocols.js';
 
 export type IpStack = 'v4' | 'v6' | 'dual' | 'unknown';
 
@@ -276,7 +277,7 @@ export function loadMachines(db: DatabaseSync): MachineRef[] {
  *  - socks/http(不进订阅,客户端不可用 → 中转无意义,纯浪费机器资源)
  */
 export function loadRelayableNodes(db: DatabaseSync): NodeRef[] {
-  const EXCLUDED = `('tunnel', 'socks', 'http')`;
+  const EXCLUDED = NOT_SUBSCRIBABLE_SINGBOX_SQL;
   const sb = (db.prepare(`SELECT id, name, server_id, listen_port FROM nodes WHERE enabled = 1 AND protocol NOT IN ${EXCLUDED}`).all() as Row[]).map((r) => ({
     id: r.id,
     name: r.name,
@@ -284,7 +285,7 @@ export function loadRelayableNodes(db: DatabaseSync): NodeRef[] {
     serverId: r.server_id,
     port: r.listen_port,
   }));
-  const xr = (db.prepare(`SELECT id, name, server_id, listen_port FROM xray_nodes WHERE enabled = 1 AND protocol NOT IN ${EXCLUDED}`).all() as Row[]).map((r) => ({
+  const xr = (db.prepare(`SELECT id, name, server_id, listen_port FROM xray_nodes WHERE enabled = 1 AND protocol NOT IN ${NOT_SUBSCRIBABLE_XRAY_SQL}`).all() as Row[]).map((r) => ({
     id: r.id,
     name: r.name,
     type: 'xray' as const,

@@ -21,6 +21,7 @@ import {
 } from './ports.js';
 import { expandRanges, describePortRanges } from './portAllow.js';
 import type { Row } from './row.js';
+import { NOT_RELAYABLE } from './protocols.js';
 
 export type BatchCore = 'singbox' | 'xray';
 export type ForwardMechanism = 'iptables' | 'socat';
@@ -78,7 +79,7 @@ export interface BatchResult {
 }
 
 /** 不进订阅、中转无意义的协议(与拓扑引擎的排除口径一致) */
-const NOT_RELAYABLE = new Set(['socks', 'http', 'tunnel']);
+
 
 interface NodeRow {
   id: number;

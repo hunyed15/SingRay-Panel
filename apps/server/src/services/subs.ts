@@ -9,6 +9,7 @@ import { getSetting } from './settings.js';
 import { config } from '../config.js';
 import type { NodeView } from '../core/subscribe/index.js';
 import type { Row } from './row.js';
+import { NOT_SUBSCRIBABLE_SINGBOX_SQL, NOT_SUBSCRIBABLE_XRAY_SQL } from './protocols.js';
 
 const secret = () => config.appSecret; // 字段加密密钥(迁移须等于旧 APP_SECRET)
 
@@ -31,7 +32,7 @@ export function collectSingboxNodes(db: DatabaseSync, realityAddr: RealityAddrMo
        FROM nodes n
        JOIN servers s ON s.id = n.server_id
        LEFT JOIN relay_settings rs ON rs.server_id = s.id
-       WHERE n.enabled = 1 AND n.protocol NOT IN ('tunnel', 'socks', 'http')
+       WHERE n.enabled = 1 AND n.protocol NOT IN ${NOT_SUBSCRIBABLE_SINGBOX_SQL}
        ORDER BY n.id`,
     )
     .all() as Row[];
@@ -57,7 +58,7 @@ export function collectXrayNodes(db: DatabaseSync, realityAddr: RealityAddrMode 
        FROM xray_nodes n
        JOIN servers s ON s.id = n.server_id
        LEFT JOIN xray_server_settings xs ON xs.server_id = s.id
-       WHERE n.enabled = 1 AND n.protocol NOT IN ('socks', 'http')
+       WHERE n.enabled = 1 AND n.protocol NOT IN ${NOT_SUBSCRIBABLE_XRAY_SQL}
        ORDER BY n.id`,
     )
     .all() as Row[];
@@ -109,7 +110,7 @@ export function collectForwardViews(db: DatabaseSync, core: 'singbox' | 'xray', 
                FROM nodes n
                JOIN servers s ON s.id = n.server_id
                LEFT JOIN relay_settings rs ON rs.server_id = s.id
-               WHERE n.id = ? AND n.enabled = 1 AND n.protocol NOT IN ('tunnel', 'socks', 'http')`,
+               WHERE n.id = ? AND n.enabled = 1 AND n.protocol NOT IN ${NOT_SUBSCRIBABLE_SINGBOX_SQL}`,
             )
             .get(pf.target_node_id) as Row | undefined)
         : (db
@@ -118,7 +119,7 @@ export function collectForwardViews(db: DatabaseSync, core: 'singbox' | 'xray', 
                FROM xray_nodes n
                JOIN servers s ON s.id = n.server_id
                LEFT JOIN xray_server_settings xs ON xs.server_id = s.id
-               WHERE n.id = ? AND n.enabled = 1 AND n.protocol NOT IN ('socks', 'http')`,
+               WHERE n.id = ? AND n.enabled = 1 AND n.protocol NOT IN ${NOT_SUBSCRIBABLE_XRAY_SQL}`,
             )
             .get(pf.target_node_id) as Row | undefined);
     if (!n) continue; // 目标节点被删/停用 → 该中转线路退出订阅
