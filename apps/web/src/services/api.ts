@@ -480,7 +480,7 @@ export const syncTopology = (): Promise<{ created: number; deleted: number; appl
 export const detectIpStacks = (): Promise<{ ok: true; summary: string }> =>
   request('/api/topology/detect-ip', { method: 'POST' });
 
-export type LifecycleAction = 'install' | 'restart' | 'uninstall';
+export type LifecycleAction = 'install' | 'restart' | 'uninstall' | 'rollback';
 
 /** 核心生命周期:install/restart/uninstall(sing-box: /:id/<action>;xray: /:id/xray-<action>,与旧版路径一致) */
 export const serverLifecycle = (

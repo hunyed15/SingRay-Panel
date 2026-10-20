@@ -13,7 +13,7 @@ import { decrypt } from '../core/crypto.js';
 import type { Row } from './row.js';
 
 export type CoreKind = 'singbox' | 'xray';
-export type LifecycleAction = 'install' | 'restart' | 'uninstall';
+export type LifecycleAction = 'install' | 'restart' | 'uninstall' | 'rollback';
 
 const SINGBOX_FALLBACK_VERSION = '1.13.18';
 const XRAY_FALLBACK_VERSION = '24.11.30';
@@ -141,8 +141,8 @@ async function runLifecycle(
       await step('下载', () => downloadWithMirror(conn, '/tmp/singbox.tar.gz', url, execFn));
       await step('解压', async () => { await execFn(conn, 'rm -rf /tmp/singbox-extract && mkdir -p /tmp/singbox-extract && tar -xzf /tmp/singbox.tar.gz -C /tmp/singbox-extract', { timeoutClass: 'config' }); });
       await step('安装二进制', async () => {
-        // find 定位二进制,不依赖解压目录名
-        await execFn(conn, `BIN=$(find /tmp/singbox-extract -type f -name sing-box | head -1) && test -n "$BIN" && install -m 755 "$BIN" ${bin}`, { timeoutClass: 'config' });
+        // 覆盖前留一份当前版本:装上去的核心跑不起来时能一键回退(<bin>.prev)
+        await execFn(conn, `BIN=$(find /tmp/singbox-extract -type f -name sing-box | head -1) && test -n "$BIN" && { [ -x ${bin} ] && cp -p ${bin} ${bin}.prev || true; } && install -m 755 "$BIN" ${bin}`, { timeoutClass: 'config' });
       });
       await step('写 systemd 单元', async () => {
         await execFn(conn, 'mkdir -p /etc/systemd/system', { timeoutClass: 'quick' });
@@ -161,6 +161,14 @@ async function runLifecycle(
       await step('启动服务', async () => { await execFn(conn, `systemctl daemon-reload && systemctl enable --now ${unit}`, { timeoutClass: 'config' }); });
     } else if (action === 'restart') {
       await step('重启', async () => { await execFn(conn, `systemctl restart ${unit}`, { timeoutClass: 'config' }); });
+    } else if (action === 'rollback') {
+      // 与上次安装的版本互换(装坏了回退,回退错了还能换回来)
+      await step('回退二进制', async () => {
+        await execFn(conn, `test -x ${bin}.prev || { echo "没有可回退的备份(${bin}.prev 不存在)"; exit 3; }`, { timeoutClass: 'quick' });
+        await execFn(conn, `mv -f ${bin} ${bin}.cur && mv -f ${bin}.prev ${bin} && mv -f ${bin}.cur ${bin}.prev`, { timeoutClass: 'config' });
+      });
+      await step('重启', async () => { await execFn(conn, `systemctl restart ${unit}`, { timeoutClass: 'config' }); });
+      db.prepare('UPDATE servers SET singbox_version = ?, ping_status = ? WHERE id = ?').run('', 'unknown', serverId);
     } else {
       await step('卸载', async () => {
         await execFn(conn, `systemctl disable --now ${unit}`, { timeoutClass: 'config' });
@@ -190,7 +198,7 @@ async function runLifecycle(
     });
     await step('解压', async () => { await execFn(conn, 'rm -rf /tmp/xray-extract && mkdir -p /tmp/xray-extract && unzip -o /tmp/xray.zip -d /tmp/xray-extract', { timeoutClass: 'config' }); });
     await step('安装二进制', async () => {
-      await execFn(conn, `BIN=$(find /tmp/xray-extract -type f -name xray | head -1) && test -n "$BIN" && install -m 755 "$BIN" ${bin}`, { timeoutClass: 'config' });
+      await execFn(conn, `BIN=$(find /tmp/xray-extract -type f -name xray | head -1) && test -n "$BIN" && { [ -x ${bin} ] && cp -p ${bin} ${bin}.prev || true; } && install -m 755 "$BIN" ${bin}`, { timeoutClass: 'config' });
     });
     await step('写 systemd 单元', async () => {
       await execFn(conn, 'mkdir -p /etc/systemd/system', { timeoutClass: 'quick' });
@@ -209,6 +217,13 @@ async function runLifecycle(
     db.prepare('UPDATE servers SET xray_version = ?, xray_ping_status = ? WHERE id = ?').run(ver, 'online', serverId);
   } else if (action === 'restart') {
     await step('重启', async () => { await execFn(conn, `systemctl restart ${unit}`, { timeoutClass: 'config' }); });
+  } else if (action === 'rollback') {
+    await step('回退二进制', async () => {
+      await execFn(conn, `test -x ${bin}.prev || { echo "没有可回退的备份(${bin}.prev 不存在)"; exit 3; }`, { timeoutClass: 'quick' });
+      await execFn(conn, `mv -f ${bin} ${bin}.cur && mv -f ${bin}.prev ${bin} && mv -f ${bin}.cur ${bin}.prev`, { timeoutClass: 'config' });
+    });
+    await step('重启', async () => { await execFn(conn, `systemctl restart ${unit}`, { timeoutClass: 'config' }); });
+    db.prepare('UPDATE servers SET xray_version = ?, xray_ping_status = ? WHERE id = ?').run('', 'unknown', serverId);
   } else {
     await step('卸载', async () => {
       await execFn(conn, `systemctl disable --now ${unit}`, { timeoutClass: 'config' });

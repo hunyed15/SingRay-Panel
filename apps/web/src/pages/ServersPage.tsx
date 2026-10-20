@@ -128,9 +128,9 @@ export function ServersPage() {
     }
   };
 
-  /** 安装/重启/卸载(生命周期结果为步骤列表,用消息提示) */
+  /** 安装/重启/回退/卸载(生命周期结果为步骤列表,用消息提示) */
   const handleLifecycle = async (record: Server, core: 'singbox' | 'xray', action: api.LifecycleAction) => {
-    const label = `${record.name} ${core === 'singbox' ? 'sing-box' : 'xray'} ${{ install: '安装', restart: '重启', uninstall: '卸载' }[action]}`;
+    const label = `${record.name} ${core === 'singbox' ? 'sing-box' : 'xray'} ${{ install: '安装', restart: '重启', rollback: '回退版本', uninstall: '卸载' }[action]}`;
     setBusy(`lifecycle:${record.id}`);
     try {
       const r = await api.serverLifecycle(record.id, core, action);
@@ -321,11 +321,13 @@ export function ServersPage() {
                   { type: 'group', label: 'sing-box', children: [
                     { key: 'singbox-install', label: '安装' },
                     { key: 'singbox-restart', label: '重启' },
+                    { key: 'singbox-rollback', label: '回退版本' },
                     { key: 'singbox-uninstall', label: '卸载', danger: true },
                   ] },
                   { type: 'group', label: 'xray', children: [
                     { key: 'xray-install', label: '安装' },
                     { key: 'xray-restart', label: '重启' },
+                    { key: 'xray-rollback', label: '回退版本' },
                     { key: 'xray-uninstall', label: '卸载', danger: true },
                   ] },
                 ],

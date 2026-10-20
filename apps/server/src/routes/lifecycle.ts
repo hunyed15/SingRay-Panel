@@ -18,7 +18,7 @@ const idParam = z.object({ id: z.coerce.number().int() });
 const actionParam = z.object({ id: z.coerce.number().int(), action: z.enum(['install', 'restart', 'uninstall']) });
 
 export default async function lifecycleRoutes(app: FastifyInstance): Promise<void> {
-  const run = async (id: number, core: 'singbox' | 'xray', action: 'install' | 'restart' | 'uninstall') => {
+  const run = async (id: number, core: 'singbox' | 'xray', action: 'install' | 'restart' | 'uninstall' | 'rollback') => {
     try {
       return await serverLifecycle(getDb(), id, core, action);
     } catch (err) {
@@ -39,6 +39,11 @@ export default async function lifecycleRoutes(app: FastifyInstance): Promise<voi
     const { id } = idParam.parse(req.params);
     return run(id, 'singbox', 'uninstall');
   });
+  // 回退到上一次安装前留的二进制(<bin>.prev)
+  app.post('/:id/rollback', async (req) => {
+    const { id } = idParam.parse(req.params);
+    return run(id, 'singbox', 'rollback');
+  });
   app.post('/:id/xray-install', async (req) => {
     const { id } = idParam.parse(req.params);
     return run(id, 'xray', 'install');
@@ -50,6 +55,10 @@ export default async function lifecycleRoutes(app: FastifyInstance): Promise<voi
   app.post('/:id/xray-uninstall', async (req) => {
     const { id } = idParam.parse(req.params);
     return run(id, 'xray', 'uninstall');
+  });
+  app.post('/:id/xray-rollback', async (req) => {
+    const { id } = idParam.parse(req.params);
+    return run(id, 'xray', 'rollback');
   });
   /** 全机器证书状态聚合(证书管理页用) */
   app.get('/certs', async () => {
