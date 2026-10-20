@@ -72,19 +72,35 @@ describe('api 客户端', () => {
     expect(getToken()).toBe('keep-me');
   });
 
-  it('401 invalid_credentials(登录密码错)→ 不清 token,按普通错误提示', async () => {
-    setToken('keep-me');
+  it('后端返回非 JSON(反代错误页)→ bad_response', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => jsonResponse(401, { error: '用户名或密码错误', code: 'invalid_credentials' })),
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => {
+              throw new SyntaxError('Unexpected token <');
+            },
+          }) as unknown as Response,
+      ),
     );
     const err = await api.getServers().then(
       () => null,
       (e: unknown) => e,
     );
-    expect((err as Error).message).toBe('用户名或密码错误');
-    expect((err as InstanceType<typeof ApiError>).code).toBe('invalid_credentials');
-    expect(getToken()).toBe('keep-me');
+    expect((err as InstanceType<typeof ApiError>).code).toBe('bad_response');
+  });
+
+  it('列表接口拿到对象而非数组 → bad_response(不让页面在 .map 里崩)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, { error: 'unexpected' })));
+    const err = await api.getServers().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect((err as InstanceType<typeof ApiError>).code).toBe('bad_response');
+    expect((err as Error).message).toContain('期望列表');
   });
 
   it('网络失败 → status 0 的 ApiError(不把 fetch 异常原样抛给页面)', async () => {

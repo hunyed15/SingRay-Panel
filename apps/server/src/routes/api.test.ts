@@ -53,6 +53,43 @@ describe('api integration (fastify.inject)', () => {
     expect(del.json()).toMatchObject({ code: 'not_found' });
   });
 
+  it('字段命名规则:直出行 snake_case,计算视图 camelCase', async () => {
+    const auth = { authorization: `Bearer ${token}` };
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/servers',
+      headers: auth,
+      payload: {
+        name: 'naming-probe',
+        role: 'landing',
+        control: 'ssh',
+        host: '10.9.9.9',
+        sshPort: 22,
+        sshUser: 'root',
+        sshAuthType: 'password',
+        sshAuthSecret: 'x',
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const id = created.json().id as number;
+
+    const row = (await app.inject({ method: 'GET', url: '/api/servers', headers: auth }))
+      .json()
+      .find((s: { id: number }) => s.id === id);
+    expect(row).toHaveProperty('ip_stack');
+    expect(row).toHaveProperty('port_allow');
+    expect(row).not.toHaveProperty('ipStack');
+
+    const machines = (await app.inject({ method: 'GET', url: '/api/topology', headers: auth })).json().machines;
+    const machine = machines.find((m: { id: number }) => m.id === id);
+    expect(machine).toBeTruthy();
+    expect(machine).toHaveProperty('ipStack');
+    expect(machine).toHaveProperty('portAllow');
+    expect(machine).not.toHaveProperty('ip_stack');
+
+    await app.inject({ method: 'DELETE', url: `/api/servers/${id}`, headers: auth });
+  });
+
   it('health is public', async () => {
     const res = await app.inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);

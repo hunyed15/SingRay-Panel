@@ -1,6 +1,11 @@
 /**
  * 数据契约:与 SingRayPanel 后端(apps/server)对齐,路由形状见 apps/server/src/routes/*。
- * 服务器/节点等行均为 snake_case(直出 SQLite 行),写路径入参为 camelCase。
+ *
+ * 命名规则(三档,别再混着用):
+ *  1. 直出 SQLite 行的读接口 → snake_case(`ip_stack` / `port_allow` / `ws_path`)
+ *  2. 写接口入参 → camelCase(`portAllow` / `sshAuthType`)
+ *  3. 后端计算出来的视图 DTO(如 TopologyMachine)→ camelCase(`ipStack` / `portAllow` 区间数组)
+ * 契约测试见 apps/server/src/routes/api.test.ts 的「字段命名」分组。
  */
 
 export type ServerRole = 'relay' | 'landing';

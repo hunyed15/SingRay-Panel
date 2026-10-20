@@ -85,13 +85,30 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     throw err;
   }
 
-  const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string } & Record<string, unknown>;
-  if (!res.ok) {
-    const err = new ApiError(res.status, data.error ?? `请求失败(HTTP ${res.status})`, data.code ?? 'unknown');
+  const parsed = (await res.json().catch(() => undefined)) as
+    | ({ error?: string; code?: string } & Record<string, unknown>)
+    | undefined;
+  if (parsed === undefined) {
+    // 反代/网关错误页、被截断的响应:报清楚,别让页面在 .map 里炸掉
+    const err = new ApiError(res.status, '后端返回的不是 JSON(可能是反向代理的错误页)', 'bad_response');
     if (!opts.silent) message.error(err.message);
     throw err;
   }
-  return data as T;
+  if (!res.ok) {
+    const err = new ApiError(res.status, parsed.error ?? `请求失败(HTTP ${res.status})`, parsed.code ?? 'unknown');
+    if (!opts.silent) message.error(err.message);
+    throw err;
+  }
+  return parsed as T;
+}
+
+/** 列表接口:后端回了 `{error}` 或 HTML 时立刻报错,而不是把对象当数组用 */
+async function requestList<T>(path: string, opts: RequestOptions = {}): Promise<T[]> {
+  const data = await request<unknown>(path, opts);
+  if (!Array.isArray(data)) {
+    throw new ApiError(0, '后端返回的数据格式不正确(期望列表)', 'bad_response');
+  }
+  return data as T[];
 }
 
 // ---------- 认证 ----------
@@ -112,7 +129,7 @@ export const updateAccount = (payload: AccountPatch): Promise<{ username: string
 
 // ---------- 服务器 ----------
 
-export const getServers = (): Promise<Server[]> => request<Server[]>('/api/servers');
+export const getServers = (): Promise<Server[]> => requestList<Server>('/api/servers');
 
 export const createServer = (payload: ServerInput): Promise<Server> =>
   request<Server>('/api/servers', { method: 'POST', body: payload });
@@ -129,7 +146,7 @@ export const testServer = (id: number): Promise<TestResult> =>
 
 // ---------- SingBox 节点 ----------
 
-export const getNodes = (): Promise<NodeItem[]> => request<NodeItem[]>('/api/nodes');
+export const getNodes = (): Promise<NodeItem[]> => requestList<NodeItem>('/api/nodes');
 
 export const createNode = (payload: NodeCreateInput): Promise<NodeItem> =>
   request<NodeItem>('/api/nodes', { method: 'POST', body: payload });
@@ -149,7 +166,7 @@ export const testNode = (id: number): Promise<NodeTestResult> =>
 
 // ---------- Xray 节点 ----------
 
-export const getXrayNodes = (): Promise<XrayNodeItem[]> => request<XrayNodeItem[]>('/api/xray/nodes');
+export const getXrayNodes = (): Promise<XrayNodeItem[]> => requestList<XrayNodeItem>('/api/xray/nodes');
 
 export const createXrayNode = (payload: XrayNodeCreateInput): Promise<XrayNodeItem> =>
   request<XrayNodeItem>('/api/xray/nodes', { method: 'POST', body: payload });
@@ -168,7 +185,7 @@ export const testXrayNode = (id: number): Promise<NodeTestResult> =>
 
 // ---------- SNI 域名库 ----------
 
-export const getSnis = (): Promise<SniItem[]> => request<SniItem[]>('/api/snis');
+export const getSnis = (): Promise<SniItem[]> => requestList<SniItem>('/api/snis');
 
 export const createSni = (domain: string, note: string): Promise<SniItem> =>
   request<SniItem>('/api/snis', { method: 'POST', body: { domain, note } });
@@ -206,7 +223,7 @@ export const testTelegram = (): Promise<{ delivered: boolean }> =>
 // ---------- 中转规则 ----------
 
 export const getPortForwards = (): Promise<PortForwardItem[]> =>
-  request<PortForwardItem[]>('/api/port-forwards');
+  requestList<PortForwardItem>('/api/port-forwards');
 
 export const createPortForward = (
   payload: PortForwardCreateInput,
@@ -275,7 +292,7 @@ export interface PendingDeployRow {
 
 /** 待部署清单(节点/证书变更未下发的机器) */
 export const getDeployPending = (): Promise<PendingDeployRow[]> =>
-  request<PendingDeployRow[]>('/api/deploy/pending');
+  requestList<PendingDeployRow>('/api/deploy/pending');
 
 export interface DeployJobMachine {
   serverId: number;
@@ -331,7 +348,7 @@ export interface CertOverviewRow {
 }
 
 /** 全机器证书状态聚合 */
-export const getCerts = (): Promise<CertOverviewRow[]> => request<CertOverviewRow[]>('/api/servers/certs');
+export const getCerts = (): Promise<CertOverviewRow[]> => requestList<CertOverviewRow>('/api/servers/certs');
 
 export const getCertStatus = (id: number): Promise<CertStatusInfo> =>
   request<CertStatusInfo>(`/api/servers/${id}/cert-status`);
