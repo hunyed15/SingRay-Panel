@@ -6,7 +6,7 @@ import rateLimit from '@fastify/rate-limit';
 import { ZodError } from 'zod';
 import { config } from './config.js';
 import { getDb } from './db/client.js';
-import { HttpError } from './services/errors.js';
+import { HttpError, codeForStatus } from './services/errors.js';
 import { bootstrapAdmin } from './services/users.js';
 import { seedSniLibrary } from './services/snis.js';
 import authRoutes from './routes/auth.js';
@@ -41,18 +41,18 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(jwt, { secret: config.jwtSecret });
   await app.register(rateLimit, { global: false });
 
-  // 统一错误出口:HttpError/ZodError → { error };其余 5xx
+  // 统一错误出口:{ error: 中文消息, code: 机器可读码 };其余 5xx
   app.setErrorHandler((err, _req, reply) => {
-    if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message });
+    if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message, code: err.code });
     if (err instanceof ZodError) {
-      return reply.code(400).send({ error: err.issues[0]?.message ?? '参数错误' });
+      return reply.code(400).send({ error: err.issues[0]?.message ?? '参数错误', code: 'bad_request' });
     }
     const status = (err as { statusCode?: number }).statusCode;
     if (status && status >= 400 && status < 500) {
-      return reply.code(status).send({ error: (err as Error).message });
+      return reply.code(status).send({ error: (err as Error).message, code: codeForStatus(status) });
     }
     app.log.error(err as Error);
-    return reply.code(500).send({ error: 'internal error' });
+    return reply.code(500).send({ error: 'internal error', code: 'internal' });
   });
 
   app.get('/health', async () => ({ ok: true, name: 'singray-panel', version: VERSION }));
@@ -71,9 +71,9 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
       const u = getDb().prepare('SELECT token_version FROM users WHERE id = ?').get(req.user.sub) as
         | { token_version: number }
         | undefined;
-      if (!u || u.token_version !== req.user.v) return reply.code(401).send({ error: 'unauthorized' });
+      if (!u || u.token_version !== req.user.v) return reply.code(401).send({ error: 'unauthorized', code: 'unauthorized' });
     } catch {
-      return reply.code(401).send({ error: 'unauthorized' });
+      return reply.code(401).send({ error: 'unauthorized', code: 'unauthorized' });
     }
   });
 

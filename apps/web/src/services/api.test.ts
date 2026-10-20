@@ -29,14 +29,15 @@ describe('api 客户端', () => {
     expect(message.error).not.toHaveBeenCalled();
   });
 
-  it('409 → 抛 ApiError(带状态码与后端中文消息)并弹一次全局提示', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(409, { error: '端口 30001 已被占用' })));
+  it('409 → 抛 ApiError(带状态码/后端 code/中文消息)并弹一次全局提示', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(409, { error: '端口 30001 已被占用', code: 'conflict' })));
     const err = await api.getServers().then(
       () => null,
       (e: unknown) => e,
     );
     expect(err).toBeInstanceOf(ApiError);
     expect((err as InstanceType<typeof ApiError>).status).toBe(409);
+    expect((err as InstanceType<typeof ApiError>).code).toBe('conflict');
     expect((err as Error).message).toBe('端口 30001 已被占用');
     expect(message.error).toHaveBeenCalledTimes(1);
     expect(message.error).toHaveBeenCalledWith('端口 30001 已被占用');
@@ -45,10 +46,45 @@ describe('api 客户端', () => {
   it('401 unauthorized → 清 token 并提示登录过期', async () => {
     setToken('stale-token');
     expect(getToken()).toBe('stale-token');
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(401, { error: 'unauthorized' })));
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(401, { error: 'unauthorized', code: 'unauthorized' })));
 
-    await expect(api.getServers()).rejects.toThrowError('登录已过期,请重新登录');
+    const err = await api.getServers().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect((err as Error).message).toBe('登录已过期,请重新登录');
+    expect((err as InstanceType<typeof ApiError>).code).toBe('unauthorized');
     expect(getToken()).toBeNull();
+  });
+
+  it('401 invalid_credentials(登录密码错)→ 不清 token,按普通错误处理', async () => {
+    setToken('keep-me');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(401, { error: '用户名或密码错误', code: 'invalid_credentials' })),
+    );
+    const err = await api.getServers().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect((err as Error).message).toBe('用户名或密码错误');
+    expect((err as InstanceType<typeof ApiError>).code).toBe('invalid_credentials');
+    expect(getToken()).toBe('keep-me');
+  });
+
+  it('401 invalid_credentials(登录密码错)→ 不清 token,按普通错误提示', async () => {
+    setToken('keep-me');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(401, { error: '用户名或密码错误', code: 'invalid_credentials' })),
+    );
+    const err = await api.getServers().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect((err as Error).message).toBe('用户名或密码错误');
+    expect((err as InstanceType<typeof ApiError>).code).toBe('invalid_credentials');
+    expect(getToken()).toBe('keep-me');
   });
 
   it('网络失败 → status 0 的 ApiError(不把 fetch 异常原样抛给页面)', async () => {

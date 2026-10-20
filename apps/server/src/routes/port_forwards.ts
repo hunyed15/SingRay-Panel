@@ -42,7 +42,7 @@ const batchSchema = z.object({
 
 const getServer = (db: ReturnType<typeof getDb>, id: number): Row => {
   const row = db.prepare('SELECT * FROM servers WHERE id = ?').get(id) as Row | undefined;
-  if (!row) throw new HttpError(400, '服务器不存在');
+  if (!row) throw new HttpError(404, '服务器不存在');
   return row;
 };
 
@@ -86,7 +86,7 @@ export default async function portForwardRoutes(app: FastifyInstance): Promise<v
     if (b.targetNodeType !== 'port') {
       const table = b.targetNodeType === 'singbox' ? 'nodes' : 'xray_nodes';
       if (!nodeId || !db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(nodeId)) {
-        throw new HttpError(400, `目标 ${b.targetNodeType === 'singbox' ? 'SingBox' : 'Xray'} 节点不存在`);
+        throw new HttpError(404, `目标 ${b.targetNodeType === 'singbox' ? 'SingBox' : 'Xray'} 节点不存在`);
       }
     }
     // 入口端口:显式指定时必须在入口机的可用端口白名单内(NAT 机器只有部分端口能对外);
@@ -162,7 +162,7 @@ export default async function portForwardRoutes(app: FastifyInstance): Promise<v
     const byId = new Map(rows.map((r) => [r.id, r]));
     const applyRow = async (row: Row) => {
       const landing = db.prepare('SELECT host, client_host FROM servers WHERE id = ?').get(row.landing_server_id) as Row | undefined;
-      if (!landing) throw new Error(`落地机 #${row.landing_server_id} 不存在`);
+      if (!landing) throw new HttpError(404, `落地机 #${row.landing_server_id} 不存在`);
       await withServerLock(entry.id, () =>
         applyForward(conn, {
           id: row.id,

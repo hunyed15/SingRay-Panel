@@ -29,7 +29,8 @@ describe('api integration (fastify.inject)', () => {
   it('bootstraps admin and logs in', async () => {
     const bad = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'admin', password: 'wrong' } });
     expect(bad.statusCode).toBe(401);
-    expect(bad.json()).toMatchObject({ error: '用户名或密码错误' });
+    // 401 + code:前端据此区分"密码错"(普通提示)与"会话过期"(清 token 跳登录页)
+    expect(bad.json()).toMatchObject({ error: '用户名或密码错误', code: 'invalid_credentials' });
 
     const res = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'admin', password: 'admin888' } });
     expect(res.statusCode).toBe(200);
@@ -42,6 +43,14 @@ describe('api integration (fastify.inject)', () => {
   it('rejects unauthenticated /api requests', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/servers' });
     expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: 'unauthorized' });
+  });
+
+  it('资源不存在 → 404 + code=not_found(不再混用 400)', async () => {
+    const auth = { authorization: `Bearer ${token}` };
+    const del = await app.inject({ method: 'DELETE', url: '/api/port-forwards/9999', headers: auth });
+    expect(del.statusCode).toBe(404);
+    expect(del.json()).toMatchObject({ code: 'not_found' });
   });
 
   it('health is public', async () => {

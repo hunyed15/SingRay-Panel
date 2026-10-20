@@ -12,6 +12,7 @@ import { serverConn } from '../services/conn.js';
 import { withServerLock } from '../services/locks.js';
 import { decrypt } from '../core/crypto.js';
 import { config } from '../config.js';
+import { HttpError } from '../services/errors.js';
 
 const idParam = z.object({ id: z.coerce.number().int() });
 const actionParam = z.object({ id: z.coerce.number().int(), action: z.enum(['install', 'restart', 'uninstall']) });
@@ -73,7 +74,7 @@ export default async function lifecycleRoutes(app: FastifyInstance): Promise<voi
   app.get('/:id/cert-status', async (req) => {
     const { id } = idParam.parse(req.params);
     const row = getDb().prepare('SELECT * FROM servers WHERE id = ?').get(id) as any;
-    if (!row) throw Object.assign(new Error('服务器不存在'), { statusCode: 404 });
+    if (!row) throw new HttpError(404, '服务器不存在');
     const domain = row.client_host || row.host;
     const conn = serverConn(getDb(), id);
     const [st, supported] = await Promise.all([certStatus(conn, domain), hasRealCert(conn, domain)]);
@@ -86,7 +87,7 @@ export default async function lifecycleRoutes(app: FastifyInstance): Promise<voi
   app.post('/:id/issue-cert', async (req) => {
     const { id } = idParam.parse(req.params);
     const row = getDb().prepare('SELECT * FROM servers WHERE id = ?').get(id) as any;
-    if (!row) throw Object.assign(new Error('服务器不存在'), { statusCode: 404 });
+    if (!row) throw new HttpError(404, '服务器不存在');
     const domain = row.client_host || row.host;
     if (!domain || /^\d+\.\d+\.\d+\.\d+$/.test(domain) || domain.includes(':')) {
       throw Object.assign(new Error(`机器地址 ${domain} 不是域名,无法签发 ACME 证书(需先设置 client_host 为域名)`), { statusCode: 400 });

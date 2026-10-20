@@ -123,7 +123,7 @@ export function planBatchForward(db: DatabaseSync, input: BatchInput): BatchPlan
 
   const entries = input.entryServerIds.map((id) => {
     const row = db.prepare('SELECT * FROM servers WHERE id = ?').get(id) as Row | undefined;
-    if (!row) throw new HttpError(400, `入口机 #${id} 不存在`);
+    if (!row) throw new HttpError(404, `入口机 #${id} 不存在`);
     return row;
   });
 

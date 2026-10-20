@@ -30,11 +30,14 @@ import type {
 
 export class ApiError extends Error {
   readonly status: number;
+  /** 后端给的机器可读码(bad_request / not_found / conflict / unauthorized / …) */
+  readonly code: string;
 
-  constructor(status: number, msg: string) {
+  constructor(status: number, msg: string, code = 'unknown') {
     super(msg);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -59,31 +62,32 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     });
   } catch {
-    const err = new ApiError(0, '无法连接面板后端,请检查服务是否启动');
+    const err = new ApiError(0, '无法连接面板后端,请检查服务是否启动', 'network');
     if (!opts.silent) message.error(err.message);
     throw err;
   }
 
   if (res.status === 401) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    if (body.error === 'unauthorized') {
-      // 会话过期:清 token 回登录页(登录页的业务性 401 走普通错误分支)
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    // 会话过期 → 清 token 回登录页;登录时密码错(invalid_credentials)走普通错误分支
+    const expired = body.code === 'unauthorized' || (!body.code && body.error === 'unauthorized');
+    if (expired) {
       clearToken();
       if (window.location.pathname !== '/login') {
         window.location.assign('/login');
       }
-      const err = new ApiError(401, '登录已过期,请重新登录');
+      const err = new ApiError(401, '登录已过期,请重新登录', 'unauthorized');
       if (!opts.silent) message.error(err.message);
       throw err;
     }
-    const err = new ApiError(401, body.error ?? '请求未授权');
+    const err = new ApiError(401, body.error ?? '请求未授权', body.code ?? 'unauthorized');
     if (!opts.silent) message.error(err.message);
     throw err;
   }
 
-  const data = (await res.json().catch(() => ({}))) as { error?: string } & Record<string, unknown>;
+  const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string } & Record<string, unknown>;
   if (!res.ok) {
-    const err = new ApiError(res.status, data.error ?? `请求失败(HTTP ${res.status})`);
+    const err = new ApiError(res.status, data.error ?? `请求失败(HTTP ${res.status})`, data.code ?? 'unknown');
     if (!opts.silent) message.error(err.message);
     throw err;
   }

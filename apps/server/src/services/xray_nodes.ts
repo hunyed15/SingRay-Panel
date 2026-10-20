@@ -116,7 +116,7 @@ export function createXrayNode(db: DatabaseSync, b: XrayNodeInput) {
   const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(b.serverId) as
     | { id: number; host: string; client_host: string }
     | undefined;
-  if (!server) throw new HttpError(400, '入口机不存在');
+  if (!server) throw new HttpError(404, '入口机不存在');
   const meta = XRAY_TEMPLATE_META[b.template];
   if (!meta) throw new HttpError(400, '未知模板');
 
