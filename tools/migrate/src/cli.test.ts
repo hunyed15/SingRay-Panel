@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -72,5 +72,85 @@ describe('migrate tool', () => {
   it('is idempotent (INSERT OR REPLACE keeps counts stable)', () => {
     const { diff } = runMigration(fromPath, toPath, false);
     expect(diff).toBe(0);
+  });
+});
+
+// ---- 边界数据:旧库结构没覆盖到的取值 ----
+
+function makeOldDb(extra?: (db: DatabaseSync) => void): { dir: string; from: string } {
+  const d = mkdtempSync(path.join(tmpdir(), 'singray-migrate-case-'));
+  const from = path.join(d, 'old.db');
+  const db = new DatabaseSync(from);
+  db.exec(OLD_DDL);
+  extra?.(db);
+  db.close();
+  return { dir: d, from };
+}
+
+function makeNewDb(d: string): string {
+  const to = path.join(d, 'new.db');
+  const baseline = path.resolve(__dirname, '../../../apps/server/src/db/migrations/0001_init.sql');
+  const dst = new DatabaseSync(to);
+  dst.exec(readFileSync(baseline, 'utf8'));
+  dst.close();
+  return to;
+}
+
+describe('migrate tool: 边界数据', () => {
+  it('旧库显式 socat 的规则不会被改成 iptables', { timeout: 30_000 }, () => {
+    const { dir: d, from } = makeOldDb((db) => {
+      db.exec('ALTER TABLE port_forwards ADD COLUMN mechanism TEXT');
+      db.prepare("INSERT INTO servers (id,name,role,host) VALUES (1,'r','relay','1.1.1.1')").run();
+      db.prepare("INSERT INTO servers (id,name,role,host) VALUES (2,'l','landing','2.2.2.2')").run();
+      db.prepare(
+        "INSERT INTO port_forwards (id,name,entry_server_id,landing_server_id,target_node_type,target_node_id,entry_port,target_port,mechanism) VALUES (1,'f',1,2,'xray',1,30001,443,'socat')",
+      ).run();
+    });
+    const to = makeNewDb(d);
+    expect(runMigration(from, to, false).diff).toBe(0);
+    const dst = new DatabaseSync(to, { readOnly: true });
+    expect((dst.prepare('SELECT mechanism FROM port_forwards WHERE id = 1').get() as { mechanism: string }).mechanism).toBe('socat');
+    dst.close();
+    rmSync(d, { recursive: true, force: true });
+  });
+
+  it('dry-run 不需要目标库,也不写任何文件', { timeout: 30_000 }, () => {
+    const { dir: d, from } = makeOldDb((db) => {
+      db.prepare("INSERT INTO users (id,username,password_hash,created_at) VALUES (1,'admin','h','2026-01-01')").run();
+    });
+    const to = path.join(d, 'never-created.db');
+    const { diff, report } = runMigration(from, to, true);
+    expect(diff).toBe(0);
+    expect(report.find((r) => r.table === 'users')!.to).toBe(1);
+    expect(existsSync(to)).toBe(false);
+    rmSync(d, { recursive: true, force: true });
+  });
+
+  it('目标库没有 schema → 明确报错(而不是写进一个空库)', { timeout: 30_000 }, () => {
+    const { dir: d, from } = makeOldDb();
+    const to = path.join(d, 'empty.db');
+    new DatabaseSync(to).close();
+    expect(() => runMigration(from, to, false)).toThrow(/no schema/);
+    rmSync(d, { recursive: true, force: true });
+  });
+
+  it('内置 SNI 以旧库为准:目标库预种的行被替换,用户自增行保留', { timeout: 30_000 }, () => {
+    const { dir: d, from } = makeOldDb((db) => {
+      db.prepare("INSERT INTO sni_library (id,domain,note,builtin) VALUES (1,'old-builtin.example','',1)").run();
+      db.prepare("INSERT INTO sni_library (id,domain,note,builtin) VALUES (2,'mine.example','我的',0)").run();
+    });
+    const to = makeNewDb(d);
+    const seeded = new DatabaseSync(to);
+    seeded.prepare("INSERT INTO sni_library (domain,note,builtin) VALUES ('seeded.example','',1)").run();
+    seeded.close();
+
+    expect(runMigration(from, to, false).diff).toBe(0);
+    const dst = new DatabaseSync(to, { readOnly: true });
+    const domains = (dst.prepare('SELECT domain FROM sni_library').all() as { domain: string }[]).map((r) => r.domain);
+    expect(domains).toContain('old-builtin.example');
+    expect(domains).toContain('mine.example');
+    expect(domains).not.toContain('seeded.example');
+    dst.close();
+    rmSync(d, { recursive: true, force: true });
   });
 });

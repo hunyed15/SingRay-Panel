@@ -85,52 +85,52 @@ function parseArgs() {
 
 export function runMigration(fromPath: string, toPath: string, dryRun: boolean): { diff: number; report: { table: string; from: number; to: number }[] } {
   const src = new DatabaseSync(fromPath, { readOnly: true });
-
-  let dst: DatabaseSync;
-  if (dryRun) {
-    dst = new DatabaseSync(':memory:');
-    const ddl = src.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND sql IS NOT NULL AND name NOT LIKE 'sqlite_%'").all() as { sql: string }[];
-    for (const { sql } of ddl) dst.exec(sql);
-  } else {
-    mkdirSync(path.dirname(toPath), { recursive: true });
-    dst = new DatabaseSync(toPath);
-    // target must already be migrated by the server (schema_migrations applied)
-    const hasTables = dst.prepare("SELECT COUNT(*) c FROM sqlite_master WHERE type='table' AND name='servers'").get() as { c: number };
-    if (!hasTables.c) throw new Error('target DB has no schema — start the server once to apply migrations first');
-  }
-
-  const report: { table: string; from: number; to: number }[] = [];
-  let diff = 0;
-
-  dst.exec('BEGIN');
+  let dst: DatabaseSync | null = null;
   try {
-    // 服务器启动会预种 builtin SNI,旧库才是权威:先清内置行再导入,保留用户自增(builtin=0)行
-    dst.prepare('DELETE FROM sni_library WHERE builtin = 1').run();
-    for (const table of TABLES) {
-      const rows = src.prepare(`SELECT * FROM ${table}`).all() as any[];
-      for (const row of rows) {
-        const { cols, map } = INSERTS[table];
-        const placeholders = cols.map(() => '?').join(',');
-        dst.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`).run(...map(row).map((v) => (v === undefined || v === null ? null : (v as string | number | bigint | Buffer))));
-      }
-      const toCount = (dst.prepare(`SELECT COUNT(*) c FROM ${table}`).get() as { c: number }).c;
-      const fromCount = rows.length;
-      // dry-run target is a schema-only clone; counts come from what we would insert
-      report.push({ table, from: fromCount, to: dryRun ? fromCount : toCount });
-      if (!dryRun && fromCount !== toCount) diff++;
+    if (dryRun) {
+      dst = new DatabaseSync(':memory:');
+      const ddl = src.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND sql IS NOT NULL AND name NOT LIKE 'sqlite_%'").all() as { sql: string }[];
+      for (const { sql } of ddl) dst.exec(sql);
+    } else {
+      mkdirSync(path.dirname(toPath), { recursive: true });
+      dst = new DatabaseSync(toPath);
+      // 目标库必须先由服务端跑过一次迁移(有 schema_migrations / servers 表)
+      const hasTables = dst.prepare("SELECT COUNT(*) c FROM sqlite_master WHERE type='table' AND name='servers'").get() as { c: number };
+      if (!hasTables.c) throw new Error('target DB has no schema — start the server once to apply migrations first');
     }
-    dst.exec('COMMIT');
-  } catch (err) {
-    dst.exec('ROLLBACK');
-    throw err;
+
+    const report: { table: string; from: number; to: number }[] = [];
+    let diff = 0;
+
+    dst.exec('BEGIN');
+    try {
+      // 服务器启动会预种 builtin SNI,旧库才是权威:先清内置行再导入,保留用户自增(builtin=0)行
+      dst.prepare('DELETE FROM sni_library WHERE builtin = 1').run();
+      for (const table of TABLES) {
+        const rows = src.prepare(`SELECT * FROM ${table}`).all() as any[];
+        for (const row of rows) {
+          const { cols, map } = INSERTS[table];
+          const placeholders = cols.map(() => '?').join(',');
+          dst.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`).run(...map(row).map((v) => (v === undefined || v === null ? null : (v as string | number | bigint | Buffer))));
+        }
+        const toCount = (dst.prepare(`SELECT COUNT(*) c FROM ${table}`).get() as { c: number }).c;
+        const fromCount = rows.length;
+        // dry-run target is a schema-only clone; counts come from what we would insert
+        report.push({ table, from: fromCount, to: dryRun ? fromCount : toCount });
+        if (!dryRun && fromCount !== toCount) diff++;
+      }
+      dst.exec('COMMIT');
+      return { diff, report };
+    } catch (err) {
+      dst.exec('ROLLBACK');
+      throw err;
+    }
   } finally {
+    // 任何失败路径也要关句柄:否则 Windows 上后续删目录/重开文件会 EPERM
     src.close();
-    dst.close();
+    dst?.close();
   }
-
-  return { diff, report };
 }
-
 if (process.argv[1]?.endsWith('cli.ts') || process.argv[1]?.endsWith('cli.js')) {
   const { from, to, dryRun } = parseArgs();
   try {
