@@ -72,6 +72,11 @@
   `PANEL_TRUST_PROXY=1`,否则限流会把所有人算成 127.0.0.1。
 - 错误响应统一 `{ error, code }`;`code` 是机器可读的(not_found / conflict /
   invalid_credentials / unauthorized …),前端不靠中文文本做控制流。
+- **API 命名统一 camelCase**:数据库行是 snake_case,由响应序列化层
+  (`core/json.ts` 的 camelize,挂 `preSerialization`)统一转换,所以 `/api/*` 的
+  JSON 一律 camelCase;`/sub/*` 与静态资源不受影响。前端再用 zod 契约
+  (`apps/web/src/services/contracts.ts`)校验每个 DTO,不符合就抛 `bad_response`
+  并指出字段路径 —— 也是"后端改名/漏字段"的早期警报。
 
 ## §7 运维
 
