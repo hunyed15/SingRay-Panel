@@ -1,34 +1,61 @@
-// AES-256-GCM secret storage, format-compatible with singbox-panel crypto.js
-// (`base64(iv).base64(tag|data)`, key = sha256(secret)) so migrated rows
-// decrypt without re-encryption. Plus credential generators.
+// AES-256-GCM 字段加密。
+//
+// v2(当前写入格式):`v2:base64(iv).base64(tag|data)`
+//   - key = sha256('singray/v2|purpose' || secret):按用途域分离,同一 secret
+//     不会在不同字段间复用同一把密钥
+//   - AAD = 'singray/v2|purpose':密文被搬到别的字段(如把 cf_token 挪进
+//     tg_bot_token)会直接认证失败,而不是"解出一段看似正常的垃圾"
+//   - purpose 缺省为空串,便于逐字段渐进接入
+//
+// 旧格式(只读,兼容 singbox-panel 迁移来的密文):`base64(iv).base64(tag|data)`,
+//   key = sha256(secret),无 AAD。读到旧格式后由调用方决定是否重写为 v2。
 
 import crypto from 'node:crypto';
 
 const TAG_LEN = 16;
+const V2_PREFIX = 'v2:';
 
-function deriveKey(secret: string): Buffer {
+const aadFor = (purpose: string): Buffer => Buffer.from(`singray/v2|${purpose}`, 'utf8');
+
+function deriveLegacyKey(secret: string): Buffer {
   return crypto.createHash('sha256').update(secret, 'utf8').digest();
 }
 
-export function encrypt(secret: string, plaintext: string): string {
-  const key = deriveKey(secret);
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const body = Buffer.concat([cipher.update(Buffer.from(plaintext, 'utf8')), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `${iv.toString('base64')}.${Buffer.concat([body, tag]).toString('base64')}`;
+function deriveKeyV2(secret: string, purpose: string): Buffer {
+  return crypto
+    .createHash('sha256')
+    .update(`singray/v2|${purpose}`, 'utf8')
+    .update(secret, 'utf8')
+    .digest();
 }
 
-export function decrypt(secret: string, token: string): string {
-  const key = deriveKey(secret);
-  const [ivB64, dataB64] = token.split('.');
+/** 是否是当前(v2)格式;调用方可用它决定要不要重写 */
+export function isV2Token(token: string): boolean {
+  return token.startsWith(V2_PREFIX);
+}
+
+export function encrypt(secret: string, plaintext: string, purpose = ''): string {
+  const key = deriveKeyV2(secret, purpose);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(aadFor(purpose));
+  const body = Buffer.concat([cipher.update(Buffer.from(plaintext, 'utf8')), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${V2_PREFIX}${iv.toString('base64')}.${Buffer.concat([body, tag]).toString('base64')}`;
+}
+
+export function decrypt(secret: string, token: string, purpose = ''): string {
+  const v2 = isV2Token(token);
+  const raw = v2 ? token.slice(V2_PREFIX.length) : token;
+  const [ivB64, dataB64] = raw.split('.');
   if (!ivB64 || !dataB64) throw new Error('malformed secret token');
   const iv = Buffer.from(ivB64, 'base64');
   const data = Buffer.from(dataB64, 'base64');
   const tag = data.subarray(data.length - TAG_LEN);
   const body = data.subarray(0, data.length - TAG_LEN);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', v2 ? deriveKeyV2(secret, purpose) : deriveLegacyKey(secret), iv);
   decipher.setAuthTag(tag);
+  if (v2) decipher.setAAD(aadFor(purpose));
   return Buffer.concat([decipher.update(body), decipher.final()]).toString('utf8');
 }
 

@@ -1,7 +1,7 @@
 // 面板设置(KV):订阅 slug、Reality 地址策略、Cloudflare/Telegram 令牌
 import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from './errors.js';
-import { genRandomHex } from '../core/crypto.js';
+import { genRandomHex, isV2Token } from '../core/crypto.js';
 import { encryptSecret, decryptSecret } from './creds.js';
 import { config } from '../config.js';
 
@@ -16,10 +16,13 @@ const TG_CHAT_ID_KEY = 'tg_chat_id';
 const SECRET_KEYS = new Set([CF_TOKEN_KEY, TG_BOT_TOKEN_KEY]);
 const ENC_PREFIX = 'enc:';
 
+/** 每个键一个用途标签:密文被搬到别的键(如把 cf_token 塞进 tg_bot_token)会认证失败 */
+const purposeOf = (key: string): string => `settings.${key}`;
+
 function decode(key: string, value: string): string {
   if (!SECRET_KEYS.has(key) || !value.startsWith(ENC_PREFIX)) return value;
   try {
-    return decryptSecret(value.slice(ENC_PREFIX.length));
+    return decryptSecret(value.slice(ENC_PREFIX.length), purposeOf(key));
   } catch {
     // APP_SECRET 换过 → 解不开;当作未配置,但保留密文不覆盖(换回旧密钥还能救)
     return '';
@@ -31,15 +34,18 @@ export function getSetting(db: DatabaseSync, key: string): string | null {
   const value = row?.value ?? null;
   if (value === null) return null;
   const plain = decode(key, value);
-  // 旧数据是明文:读到时顺手加密回写(不需要迁移脚本)
-  if (SECRET_KEYS.has(key) && value && !value.startsWith(ENC_PREFIX)) {
-    setSetting(db, key, plain);
+  if (SECRET_KEYS.has(key) && value && plain) {
+    // 明文(旧数据)→ 加密回写;旧格式密文 → 升级成带 purpose 的 v2 信封
+    if (!value.startsWith(ENC_PREFIX) || !isV2Token(value.slice(ENC_PREFIX.length))) {
+      setSetting(db, key, plain);
+    }
   }
   return plain;
 }
 
 export function setSetting(db: DatabaseSync, key: string, value: string): void {
-  const stored = SECRET_KEYS.has(key) && value ? `${ENC_PREFIX}${encryptSecret(value)}` : value;
+  const stored =
+    SECRET_KEYS.has(key) && value ? `${ENC_PREFIX}${encryptSecret(value, purposeOf(key))}` : value;
   db.prepare(
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
   ).run(key, stored);

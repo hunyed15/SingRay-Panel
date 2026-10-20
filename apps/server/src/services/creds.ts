@@ -13,10 +13,10 @@ export function decryptJson(token: string): NodeCreds {
   return JSON.parse(decrypt(config.appSecret, token)) as NodeCreds;
 }
 
-export function encryptSecret(plain: string): string {
-  return encrypt(config.appSecret, plain);
+export function encryptSecret(plain: string, purpose = ''): string {
+  return encrypt(config.appSecret, plain, purpose);
 }
 
-export function decryptSecret(token: string): string {
-  return decrypt(config.appSecret, token);
+export function decryptSecret(token: string, purpose = ''): string {
+  return decrypt(config.appSecret, token, purpose);
 }
