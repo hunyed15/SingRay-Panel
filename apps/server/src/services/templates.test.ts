@@ -31,6 +31,7 @@ describe('singbox templates (ported from old templates.js)', () => {
     const vmess = nodeDefaults('vmess', 'h1.example.com');
     expect(vmess.sni).toBe('h1.example.com');
     expect(vmess.wsPath).toMatch(/^\/ws-[0-9a-f]+$/);
+    // trojan 已无新建入口,但迁移来的存量节点仍要能生成默认值 → 这条守的是兼容路径
     expect(nodeDefaults('trojan', 'h1.example.com').sni).toBe('h1.example.com');
   });
 
@@ -55,6 +56,7 @@ describe('xray templates (ported from old xrayconfig/templates.js)', () => {
   it('xrayNodeDefaults: vmess ws path prefixed /xray-ws-', () => {
     expect(xrayNodeDefaults('vless', 'h1').sni).toBe('www.microsoft.com');
     expect(xrayNodeDefaults('vmess', 'h1.example.com').wsPath).toMatch(/^\/xray-ws-[0-9a-f]+$/);
+    // 同上:存量 xray trojan 节点的兼容路径
     expect(xrayNodeDefaults('trojan', 'h1.example.com').sni).toBe('h1.example.com');
   });
 });

@@ -377,6 +377,10 @@ export interface SystemStatus {
   tgConfigured: boolean;
   healthIntervalMin: number;
   backupRetention: number;
+  /** 每日自动备份的小时(0-23) */
+  backupHour: number;
+  /** 节点可用性探测间隔(分钟);0 = 关闭 */
+  probeIntervalMin: number;
 }
 
 /** 运维状态(调度器/备份/TG) */

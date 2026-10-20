@@ -82,7 +82,7 @@ export default async function portForwardRoutes(app: FastifyInstance): Promise<v
     const entry = getServer(db, b.entryServerId);
     const landing = getServer(db, b.landingServerId);
     // 'port' 模式(两跳中转中间跳)不需要节点;其余模式校验节点存在
-    let nodeId = b.targetNodeId ?? 0;
+    const nodeId = b.targetNodeId ?? 0;
     if (b.targetNodeType !== 'port') {
       const table = b.targetNodeType === 'singbox' ? 'nodes' : 'xray_nodes';
       if (!nodeId || !db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(nodeId)) {

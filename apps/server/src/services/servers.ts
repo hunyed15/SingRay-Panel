@@ -80,6 +80,7 @@ const SELECT_ALL = 'SELECT * FROM servers';
  * 名称允许中文与空格(展示用),但禁止路径分隔符与控制字符:
  * `name` 会拼成 `/etc/sing-box/tls/<name>.crt`,含 `/` 或 `..` 就能写到任意路径。
  */
+// eslint-disable-next-line no-control-regex -- 这里就是要拒绝控制字符,不是笔误
 const NAME_RE = /^[^/\\\u0000-\u001f]{1,64}$/;
 
 function assertSafeServerFields(b: { name?: string; host?: string; clientHost?: string }): void {

@@ -84,8 +84,9 @@ export function OpsCard() {
             立即健康检查
           </Button>
           <Typography.Text type="secondary">
-            自动备份每日 {String(status?.jobs.find((j) => j.name === 'backup')?.intervalMs ?? 0) !== '0' ? '按配置小时执行' : ''}·保留{' '}
-            {status?.backupRetention ?? '-'} 份 · 健康检查每 {status?.healthIntervalMin ?? '-'} 分钟
+            自动备份每日 {status?.backupHour ?? '-'}:00 · 保留 {status?.backupRetention ?? '-'} 份 · 健康检查每{' '}
+            {status?.healthIntervalMin ?? '-'} 分钟 · 可用性探测每{' '}
+            {status?.probeIntervalMin ? `${status.probeIntervalMin} 分钟` : '关闭'}
           </Typography.Text>
         </Flex>
 

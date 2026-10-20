@@ -16,5 +16,11 @@
     "typecheck": "tsc -b apps/server tools/migrate && npm run typecheck --workspace apps/web",
     "lint": "eslint .",
     "migrate": "node tools/migrate/src/cli.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript-eslint": "^8.72.0"
   }
 }

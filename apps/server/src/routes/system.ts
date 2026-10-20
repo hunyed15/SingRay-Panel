@@ -15,6 +15,8 @@ export default async function systemRoutes(app: FastifyInstance): Promise<void> 
     tgConfigured: (() => { const t = resolveTgConfig(getDb()); return Boolean(t.botToken && t.chatId); })(),
     healthIntervalMin: config.healthIntervalMin,
     backupRetention: config.backupRetention,
+    backupHour: config.backupHour,
+    probeIntervalMin: config.probeIntervalMin,
   }));
 
   /** 立即备份 */

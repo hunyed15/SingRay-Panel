@@ -113,7 +113,7 @@ export function DashboardPage() {
           </Flex>
         ) : (
           <Typography.Text type="secondary">
-            暂无告警(健康检查每 {5} 分钟运行,状态变化时告警;{data?.tgConfigured ? '已接入 Telegram 推送' : 'Telegram 未配置,告警仅落库'})
+            暂无告警(健康检查按设定间隔运行,状态变化时告警;{data?.tgConfigured ? '已接入 Telegram 推送' : 'Telegram 未配置,告警仅落库'})
           </Typography.Text>
         )}
       </Card>
