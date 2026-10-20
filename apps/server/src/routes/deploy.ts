@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getDb } from '../db/client.js';
 import { deployAll, deployServerBothCores } from '../services/deployAll.js';
 import { listPendingDeploys } from '../services/deployState.js';
+import { listDeployAudits } from '../services/deployAudit.js';
 import { genRandomHex } from '../core/crypto.js';
 import type { MachineDeployResult } from '../services/deployAll.js';
 
@@ -35,6 +36,14 @@ function pruneJobs(): void {
 export default async function deployRoutes(app: FastifyInstance): Promise<void> {
   /** 待部署清单(服务器页"有未下发变更"横幅) */
   app.get('/pending', async () => listPendingDeploys(getDb()));
+
+  /** 部署审计:最近 N 次部署结果(进程重启也查得到) */
+  app.get('/audits', async (req) => {
+    const q = z
+      .object({ serverId: z.coerce.number().int().optional(), limit: z.coerce.number().int().min(1).max(200).optional() })
+      .parse(req.query ?? {});
+    return listDeployAudits(getDb(), q.serverId, q.limit ?? 50);
+  });
 
   /** 一键部署全部:启动后台任务,前端轮询 /status/:jobId 实时进度 */
   app.post('/all', async (req, reply) => {

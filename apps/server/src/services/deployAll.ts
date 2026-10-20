@@ -15,6 +15,7 @@ import type { SshConn } from '../core/ssh/executor.js';
 import { decrypt, encrypt, genRealityKeypair, genShortId, genSsPassword } from '../core/crypto.js';
 import { serverLifecycle } from './lifecycle.js';
 import { withServerLock } from './locks.js';
+import { recordDeploy } from './deployAudit.js';
 import { clearDirtyCore, dirtyStamp } from './deployState.js';
 import { hasRealCert, certPaths } from '../core/certs/acme.js';
 import { config } from '../config.js';
@@ -207,6 +208,7 @@ async function deployBothCoresInner(
   if (sbRow.control !== 'ssh') {
     base.singbox = { ok: false, error: 'agent 模式暂不支持下发(V1 仅 SSH)', steps: [] };
     base.xray = { ok: false, error: 'agent 模式暂不支持下发', steps: [] };
+    recordDeploy(db, base);
     return base;
   }
   const conn = rowConn(db, sbRow);
@@ -296,6 +298,7 @@ async function deployBothCoresInner(
     clearDirtyCore(db, serverId, 'xray', dirty.xray);
   }
 
+  recordDeploy(db, base); // 审计:进程重启后还能查到上次部署的结果
   return base;
 }
 
