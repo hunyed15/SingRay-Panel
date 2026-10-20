@@ -42,7 +42,7 @@ export function NodesPage() {
   const probes = new Map((data?.probes ?? []).map((p) => [`${p.nodeType}:${p.nodeId}`, p]));
   const landings = servers.filter((s) => s.role === 'landing');
   const onlineServerIds = new Set(
-    servers.filter((s) => s.ping_status === 'online').map((s) => s.id),
+    servers.filter((s) => s.pingStatus === 'online').map((s) => s.id),
   );
 
   const handleToggle = async (node: NodeItem, enabled: boolean) => {
@@ -73,9 +73,9 @@ export function NodesPage() {
   };
 
   const handleCopyLink = async (node: NodeItem) => {
-    if (!node.share_link) return;
+    if (!node.shareLink) return;
     try {
-      await navigator.clipboard.writeText(node.share_link);
+      await navigator.clipboard.writeText(node.shareLink);
       message.success(`已复制 ${node.name} 的分享链接`);
     } catch {
       message.error('复制失败,请手动选择复制');
@@ -122,19 +122,19 @@ export function NodesPage() {
     },
     {
       title: '入口机',
-      dataIndex: 'server_name',
+      dataIndex: 'serverName',
       width: 100,
-      sorter: (a, b) => a.server_name.localeCompare(b.server_name),
+      sorter: (a, b) => a.serverName.localeCompare(b.serverName),
       defaultSortOrder: 'ascend',
-      filters: [...new Set(nodes.map((n) => n.server_name))].map((s) => ({ text: s, value: s })),
-      onFilter: (v, r) => r.server_name === v,
+      filters: [...new Set(nodes.map((n) => n.serverName))].map((s) => ({ text: s, value: s })),
+      onFilter: (v, r) => r.serverName === v,
       render: (value: string) => <Typography.Text>{value}</Typography.Text>,
     },
     {
       title: '端口',
-      dataIndex: 'listen_port',
+      dataIndex: 'listenPort',
       width: 80,
-      sorter: (a, b) => a.listen_port - b.listen_port,
+      sorter: (a, b) => a.listenPort - b.listenPort,
       render: (value: number) => <Typography.Text code>{value}</Typography.Text>,
     },
     {
@@ -143,19 +143,19 @@ export function NodesPage() {
       width: 160,
       render: (_, record) => {
         if (record.protocol === 'tunnel') {
-          return record.tunnel_address ? (
+          return record.tunnelAddress ? (
             <Typography.Text code>
-              {record.tunnel_address}:{record.tunnel_port}
+              {record.tunnelAddress}:{record.tunnelPort}
             </Typography.Text>
           ) : (
             <Typography.Text type="secondary">-</Typography.Text>
           );
         }
-        return record.outbound_type === 'direct' ? (
+        return record.outboundType === 'direct' ? (
           <Typography.Text type="secondary">直连</Typography.Text>
         ) : (
           <Typography.Text>
-            中转 <Typography.Text type="secondary">→</Typography.Text> {record.landing_name ?? '-'}
+            中转 <Typography.Text type="secondary">→</Typography.Text> {record.landingName ?? '-'}
           </Typography.Text>
         );
       },
@@ -202,7 +202,7 @@ export function NodesPage() {
             loading={testingId === record.id}
             onClick={() => handleTest(record)}
           >
-            {tr ? (tr.ok ? `${tr.latency_ms ?? ''}ms` : '❌') : '测速'}
+            {tr ? (tr.ok ? `${tr.latencyMs ?? ''}ms` : '❌') : '测速'}
           </Button>
         );
       },
@@ -215,7 +215,7 @@ export function NodesPage() {
         if (record.protocol === 'tunnel') {
           return <Typography.Text type="secondary">端口转发</Typography.Text>;
         }
-        return record.share_link ? (
+        return record.shareLink ? (
           <Button type="link" icon={<CopyOutlined />} onClick={() => handleCopyLink(record)}>
             复制
           </Button>

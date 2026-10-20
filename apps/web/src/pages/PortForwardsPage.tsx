@@ -113,21 +113,21 @@ export function PortForwardsPage() {
   const landingServers = servers.filter((s) => s.role === 'landing');
 
   const serverOptions = (list: Server[]) =>
-    list.map((s) => ({ value: s.id, label: `${s.name}(${s.client_host || s.host})` }));
+    list.map((s) => ({ value: s.id, label: `${s.name}(${s.clientHost || s.host})` }));
 
   const landingServerId = Form.useWatch('landingServerId', form);
   const mechanism = Form.useWatch('mechanism', form) ?? 'iptables';
   const entryServerId = Form.useWatch('entryServerId', form);
   /** 入口机的可用端口白名单(NAT 机器);无则空串 */
-  const entryPortAllow = servers.find((s) => s.id === entryServerId)?.port_allow ?? '';
+  const entryPortAllow = servers.find((s) => s.id === entryServerId)?.portAllow ?? '';
   // 目标节点限定为所选落地机上的节点
   const landingNodes = [
     ...nodes
-      .filter((n) => n.server_id === landingServerId && n.protocol !== 'tunnel')
-      .map((n) => ({ value: `singbox:${n.id}`, label: `[SingBox] ${n.name} port=${n.listen_port}` })),
+      .filter((n) => n.serverId === landingServerId && n.protocol !== 'tunnel')
+      .map((n) => ({ value: `singbox:${n.id}`, label: `[SingBox] ${n.name} port=${n.listenPort}` })),
     ...xrayNodes
-      .filter((n) => n.server_id === landingServerId)
-      .map((n) => ({ value: `xray:${n.id}`, label: `[Xray] ${n.name} port=${n.listen_port}` })),
+      .filter((n) => n.serverId === landingServerId)
+      .map((n) => ({ value: `xray:${n.id}`, label: `[Xray] ${n.name} port=${n.listenPort}` })),
   ];
 
   const openCreate = () => {
@@ -269,10 +269,10 @@ export function PortForwardsPage() {
   const targetOptions = [
     ...nodes
       .filter((n) => !NOT_RELAYABLE.has(n.protocol))
-      .map((n) => ({ value: `singbox:${n.id}`, label: `[SingBox] ${n.name} · ${n.server_name} :${n.listen_port}` })),
+      .map((n) => ({ value: `singbox:${n.id}`, label: `[SingBox] ${n.name} · ${n.serverName} :${n.listenPort}` })),
     ...xrayNodes
       .filter((n) => !NOT_RELAYABLE.has(n.protocol))
-      .map((n) => ({ value: `xray:${n.id}`, label: `[Xray] ${n.name} · ${n.server_name} :${n.listen_port}` })),
+      .map((n) => ({ value: `xray:${n.id}`, label: `[Xray] ${n.name} · ${n.serverName} :${n.listenPort}` })),
   ];
 
   const openBatch = () => {
@@ -376,7 +376,7 @@ export function PortForwardsPage() {
         </Flex>
       ),
     },
-    { title: '入口机', dataIndex: 'entry_server_name', width: 100 },
+    { title: '入口机', dataIndex: 'entryServerName', width: 100 },
     {
       title: '核心',
       dataIndex: 'core',
@@ -390,17 +390,17 @@ export function PortForwardsPage() {
     },
     {
       title: '入口端口',
-      dataIndex: 'entry_port',
+      dataIndex: 'entryPort',
       width: 90,
       render: (v: number) => <Typography.Text code>{v}</Typography.Text>,
     },
-    { title: '落地机', dataIndex: 'landing_server_name', width: 100 },
-    { title: '目标节点', dataIndex: 'target_node_name', width: 190 },
+    { title: '落地机', dataIndex: 'landingServerName', width: 100 },
+    { title: '目标节点', dataIndex: 'targetNodeName', width: 190 },
     {
       title: '目标端口',
-      key: 'target_port',
+      key: 'targetPort',
       width: 90,
-      render: (_, r) => <Typography.Text code>{r.target_port}</Typography.Text>,
+      render: (_, r) => <Typography.Text code>{r.targetPort}</Typography.Text>,
     },
     {
       title: '机制',
@@ -415,12 +415,12 @@ export function PortForwardsPage() {
     },
     {
       title: '进订阅',
-      key: 'include_in_sub',
+      key: 'includeInSub',
       width: 90,
       render: (_, r) => (
         <Switch
           size="small"
-          checked={r.include_in_sub === 1}
+          checked={r.includeInSub === 1}
           onChange={async (checked) => {
             try {
               await api.updatePortForward(r.id, { includeInSub: checked });

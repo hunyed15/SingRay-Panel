@@ -69,7 +69,7 @@ export function XrayNodeCreateModal({
     value: s.id,
     label: `${s.name}(${s.role === 'relay' ? '中转机' : '落地机'})`,
   }));
-  const landingOptions = landings.map((s) => ({ value: s.id, label: `${s.name} · ${s.client_host || s.host}` }));
+  const landingOptions = landings.map((s) => ({ value: s.id, label: `${s.name} · ${s.clientHost || s.host}` }));
   const sniOptions = snis.map((s) => ({
     value: s.domain,
     label: s.note ? `${s.domain} · ${s.note}` : s.domain,
@@ -98,7 +98,7 @@ export function XrayNodeCreateModal({
         flow: template === 'xray-vless-reality' ? values.flow || 'xtls-rprx-vision' : undefined,
         port: values.port ? Number(values.port) : undefined,
       });
-      message.success(`节点 ${node.name} 已创建(端口 ${node.listen_port})`);
+      message.success(`节点 ${node.name} 已创建(端口 ${node.listenPort})`);
       onCreated(node);
     } catch {
       // 错误提示由 api 层统一弹出

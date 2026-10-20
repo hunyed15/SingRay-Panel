@@ -29,6 +29,7 @@ import { runHealthCheckCycle } from './core/healthcheck.js';
 import { collectAllTraffic } from './core/traffic.js';
 import { probeAllNodes } from './services/autoProbe.js';
 import { recordRun } from './core/alerts.js';
+import { camelize } from './core/json.js';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '0.1.0';
@@ -76,6 +77,12 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     } catch {
       return reply.code(401).send({ error: 'unauthorized', code: 'unauthorized' });
     }
+  });
+
+  // 响应 key 归一:/api/* 一律 camelCase(DB 行是 snake_case;Sub/静态资源不受影响)
+  app.addHook('preSerialization', async (req, _reply, payload) => {
+    if (!req.url.split('?')[0].startsWith('/api')) return payload;
+    return camelize(payload);
   });
 
   await app.register(authRoutes, { prefix: '/api/auth' });

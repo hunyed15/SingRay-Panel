@@ -214,16 +214,16 @@ export function ServersPage() {
     },
     {
       title: '状态',
-      dataIndex: 'ping_status',
+      dataIndex: 'pingStatus',
       width: 80,
-      render: (status: Server['ping_status']) => {
+      render: (status: Server['pingStatus']) => {
         const meta = SERVER_STATUS_META[status] ?? SERVER_STATUS_META.unknown;
         return <Badge status={meta.status} text={meta.text} />;
       },
     },
     {
       title: 'sing-box',
-      dataIndex: 'singbox_version',
+      dataIndex: 'singboxVersion',
       width: 90,
       render: (value: string) => (
         <Typography.Text type="secondary">{value || '-'}</Typography.Text>
@@ -231,7 +231,7 @@ export function ServersPage() {
     },
     {
       title: 'xray',
-      dataIndex: 'xray_version',
+      dataIndex: 'xrayVersion',
       width: 90,
       render: (value: string) => (
         <Typography.Text type="secondary">{value || '-'}</Typography.Text>
@@ -245,24 +245,24 @@ export function ServersPage() {
       render: (_, record) => (
         <Tooltip
           title={
-            record.client_host && record.client_host !== record.host
-              ? `SSH: ${record.ssh_user}@${record.host}:${record.ssh_port} · 对外: ${record.client_host}`
-              : `${record.ssh_user}@${record.host}:${record.ssh_port}(${record.ssh_auth_type === 'key' ? '私钥' : '密码'})`
+            record.clientHost && record.clientHost !== record.host
+              ? `SSH: ${record.sshUser}@${record.host}:${record.sshPort} · 对外: ${record.clientHost}`
+              : `${record.sshUser}@${record.host}:${record.sshPort}(${record.sshAuthType === 'key' ? '私钥' : '密码'})`
           }
         >
-          <Typography.Text code>{record.client_host || record.host || '-'}</Typography.Text>
+          <Typography.Text code>{record.clientHost || record.host || '-'}</Typography.Text>
         </Tooltip>
       ),
     },
     {
       title: '可用端口',
-      key: 'port_allow',
+      key: 'portAllow',
       width: 120,
       render: (_, record) =>
-        record.port_allow ? (
-          <Tooltip title={`NAT 可用端口白名单:${record.port_allow}(该机节点端口与中转入口端口都只从这里分配)`}>
+        record.portAllow ? (
+          <Tooltip title={`NAT 可用端口白名单:${record.portAllow}(该机节点端口与中转入口端口都只从这里分配)`}>
             <Tag color="orange" style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {record.port_allow}
+              {record.portAllow}
             </Tag>
           </Tooltip>
         ) : (
@@ -271,7 +271,7 @@ export function ServersPage() {
     },
     {
       title: '最近探测',
-      dataIndex: 'last_seen',
+      dataIndex: 'lastSeen',
       width: 110,
       render: (value: string | null) => (
         <Typography.Text type="secondary">{formatRelativeTime(value)}</Typography.Text>

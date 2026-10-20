@@ -92,7 +92,7 @@ export function CertModal({ open, server, onClose, onChanged }: Props) {
             {!status.domain || /^\d+\.\d+\.\d+\.\d+$/.test(status.domain) || status.domain.includes(':') ? (
               <Descriptions.Item label="⚠️">
                 <Typography.Text type="danger">
-                  机器地址不是域名,无法签发 ACME 证书。请先在服务器编辑中把 client_host 设为解析到本机的域名。
+                  机器地址不是域名,无法签发 ACME 证书。请先在服务器编辑中把 clientHost 设为解析到本机的域名。
                 </Typography.Text>
               </Descriptions.Item>
             ) : null}

@@ -90,16 +90,16 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
         control: record.control,
         region: record.region,
         host: record.host,
-        clientHost: record.client_host ?? '',
-        sshPort: record.ssh_port,
-        sshUser: record.ssh_user,
-        sshAuthType: record.ssh_auth_type,
+        clientHost: record.clientHost ?? '',
+        sshPort: record.sshPort,
+        sshUser: record.sshUser,
+        sshAuthType: record.sshAuthType,
         sshAuthSecret: '',
-        sshSudo: record.ssh_sudo === 1,
-        jumpServerId: record.jump_server_id ?? null,
-        relayMechanism: record.relay_mechanism ?? 'socat',
-        preferViaServerId: record.prefer_via_server_id ?? null,
-        portAllow: record.port_allow ?? '',
+        sshSudo: record.sshSudo === 1,
+        jumpServerId: record.jumpServerId ?? null,
+        relayMechanism: record.relayMechanism ?? 'socat',
+        preferViaServerId: record.preferViaServerId ?? null,
+        portAllow: record.portAllow ?? '',
       });
     } else {
       form.setFieldsValue({
@@ -260,8 +260,8 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
             allowClear
             placeholder="自动(引擎选第一台可用双栈机)"
             options={servers
-              .filter((s) => s.id !== record?.id && s.ip_stack === 'dual')
-              .map((s) => ({ value: s.id, label: `${s.name}(${s.client_host || s.host})` }))}
+              .filter((s) => s.id !== record?.id && s.ipStack === 'dual')
+              .map((s) => ({ value: s.id, label: `${s.name}(${s.clientHost || s.host})` }))}
           />
         </Form.Item>
 
@@ -320,7 +320,7 @@ export function ServerFormModal({ open, record, servers = [], onClose, onSaved }
                 placeholder="直连(不使用跳板)"
                 options={servers
                   .filter((s) => s.id !== record?.id && s.control === 'ssh')
-                  .map((s) => ({ value: s.id, label: `${s.name}(${s.client_host || s.host})` }))}
+                  .map((s) => ({ value: s.id, label: `${s.name}(${s.clientHost || s.host})` }))}
               />
             </Form.Item>
             <Form.Item

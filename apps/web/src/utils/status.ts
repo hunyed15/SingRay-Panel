@@ -58,8 +58,8 @@ export const MECHANISM_META: Record<ForwardMechanism, { text: string; tagColor: 
 
 /** 节点「在线」为前端派生:启用 且 入口机探测在线 */
 export function isNodeOnline(
-  node: { enabled: number; server_id: number },
+  node: { enabled: number; serverId: number },
   onlineServerIds: ReadonlySet<number>,
 ): boolean {
-  return node.enabled === 1 && onlineServerIds.has(node.server_id);
+  return node.enabled === 1 && onlineServerIds.has(node.serverId);
 }

@@ -53,7 +53,7 @@ describe('api integration (fastify.inject)', () => {
     expect(del.json()).toMatchObject({ code: 'not_found' });
   });
 
-  it('字段命名规则:直出行 snake_case,计算视图 camelCase', async () => {
+  it('字段命名规则:所有 /api 响应统一 camelCase', async () => {
     const auth = { authorization: `Bearer ${token}` };
     const created = await app.inject({
       method: 'POST',
@@ -76,9 +76,9 @@ describe('api integration (fastify.inject)', () => {
     const row = (await app.inject({ method: 'GET', url: '/api/servers', headers: auth }))
       .json()
       .find((s: { id: number }) => s.id === id);
-    expect(row).toHaveProperty('ip_stack');
-    expect(row).toHaveProperty('port_allow');
-    expect(row).not.toHaveProperty('ipStack');
+    expect(row).toHaveProperty('ipStack');
+    expect(row).toHaveProperty('portAllow');
+    expect(row).not.toHaveProperty('ip_stack');
 
     const machines = (await app.inject({ method: 'GET', url: '/api/topology', headers: auth })).json().machines;
     const machine = machines.find((m: { id: number }) => m.id === id);
@@ -127,8 +127,8 @@ describe('api integration (fastify.inject)', () => {
     expect(created.statusCode).toBe(200);
     const node = created.json();
     expect(node.protocol).toBe('vmess');
-    expect(node.listen_port).toBe(30001);
-    expect(node.share_link).toMatch(/^vmess:\/\//);
+    expect(node.listenPort).toBe(30001);
+    expect(node.shareLink).toMatch(/^vmess:\/\//);
 
     const dup = await app.inject({
       method: 'POST',
@@ -156,7 +156,7 @@ describe('api integration (fastify.inject)', () => {
       payload: { template: 'xray-vless-reality', name: 'x1', serverId: srv.id, port: 31001 },
     });
     expect(created.statusCode).toBe(200);
-    expect(created.json()).toMatchObject({ protocol: 'vless', tls_mode: 'reality', flow: 'xtls-rprx-vision' });
+    expect(created.json()).toMatchObject({ protocol: 'vless', tlsMode: 'reality', flow: 'xtls-rprx-vision' });
 
     const purged = await app.inject({ method: 'POST', url: '/api/xray/nodes/purge', headers: auth, payload: {} });
     expect(purged.statusCode).toBe(200);
@@ -224,7 +224,7 @@ describe('api integration (fastify.inject)', () => {
         payload: { name: 'nat-relay', role: 'relay', host: '10.9.0.1', sshAuthSecret: 'K', portAllow: '32679-32681' },
       })
     ).json();
-    expect(nat.port_allow).toBe('32679-32681');
+    expect(nat.portAllow).toBe('32679-32681');
 
     const land = (
       await app.inject({
@@ -253,7 +253,7 @@ describe('api integration (fastify.inject)', () => {
       payload: { template: 'vmess-ws-tls', name: 'auto-port', serverId: land.id },
     });
     expect(auto.statusCode).toBe(200);
-    expect(auto.json().listen_port).toBe(32679);
+    expect(auto.json().listenPort).toBe(32679);
 
     // 一键添加预览:入口机白名单内分配,且避开全局已用端口(32679 已被上面节点占用)
     const preview = await app.inject({

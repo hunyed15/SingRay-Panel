@@ -68,9 +68,9 @@ export function XrayNodeEditModal({
   const { message } = App.useApp();
   const [saving, setSaving] = useState(false);
   const protocol = Form.useWatch('protocol', form) ?? node?.protocol;
-  const outboundType = Form.useWatch('outboundType', form) ?? node?.outbound_type;
+  const outboundType = Form.useWatch('outboundType', form) ?? node?.outboundType;
 
-  const landingOptions = landings.map((s) => ({ value: s.id, label: `${s.name} · ${s.client_host || s.host}` }));
+  const landingOptions = landings.map((s) => ({ value: s.id, label: `${s.name} · ${s.clientHost || s.host}` }));
   const sniOptions = snis.map((s) => ({
     value: s.domain,
     label: s.note ? `${s.domain} · ${s.note}` : s.domain,
@@ -84,13 +84,13 @@ export function XrayNodeEditModal({
       name: node.name,
       note: node.note,
       enabled: node.enabled === 1,
-      port: node.listen_port,
-      outboundType: node.outbound_type || 'direct',
-      landingServerId: node.landing_server_id,
+      port: node.listenPort,
+      outboundType: node.outboundType || 'direct',
+      landingServerId: node.landingServerId,
       sni: node.sni,
       flow: node.flow || 'xtls-rprx-vision',
-      authUser: node.auth_user,
-      authPassword: node.auth_password,
+      authUser: node.authUser,
+      authPassword: node.authPassword,
     });
   }, [open, node, form]);
 
@@ -148,7 +148,7 @@ export function XrayNodeEditModal({
     >
       <Form form={form} layout="vertical" requiredMark={false}>
         <Form.Item label="入口机">
-          <Typography.Text>{node?.server_name}</Typography.Text>
+          <Typography.Text>{node?.serverName}</Typography.Text>
         </Form.Item>
         <Form.Item name="protocol" label="协议" rules={[{ required: true }]}>
           <Select options={PROTOCOL_OPTIONS} />

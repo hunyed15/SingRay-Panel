@@ -35,7 +35,7 @@ export function XrayNodesPage() {
   const snis: SniItem[] = data?.snis ?? [];
   const landings = servers.filter((s) => s.role === 'landing');
   const onlineServerIds = new Set(
-    servers.filter((s) => s.ping_status === 'online').map((s) => s.id),
+    servers.filter((s) => s.pingStatus === 'online').map((s) => s.id),
   );
 
   const handleToggle = async (node: XrayNodeItem, enabled: boolean) => {
@@ -62,9 +62,9 @@ export function XrayNodesPage() {
   };
 
   const handleCopyLink = async (node: XrayNodeItem) => {
-    if (!node.share_link) return;
+    if (!node.shareLink) return;
     try {
-      await navigator.clipboard.writeText(node.share_link);
+      await navigator.clipboard.writeText(node.shareLink);
       message.success(`已复制 ${node.name} 的分享链接`);
     } catch {
       message.error('复制失败,请手动选择复制');
@@ -118,19 +118,19 @@ export function XrayNodesPage() {
     },
     {
       title: '入口机',
-      dataIndex: 'server_name',
+      dataIndex: 'serverName',
       width: 100,
-      sorter: (a, b) => a.server_name.localeCompare(b.server_name),
+      sorter: (a, b) => a.serverName.localeCompare(b.serverName),
       defaultSortOrder: 'ascend',
-      filters: [...new Set(nodes.map((n) => n.server_name))].map((s) => ({ text: s, value: s })),
-      onFilter: (v, r) => r.server_name === v,
+      filters: [...new Set(nodes.map((n) => n.serverName))].map((s) => ({ text: s, value: s })),
+      onFilter: (v, r) => r.serverName === v,
       render: (value: string) => <Typography.Text>{value}</Typography.Text>,
     },
     {
       title: '端口',
-      dataIndex: 'listen_port',
+      dataIndex: 'listenPort',
       width: 80,
-      sorter: (a, b) => a.listen_port - b.listen_port,
+      sorter: (a, b) => a.listenPort - b.listenPort,
       render: (value: number) => <Typography.Text code>{value}</Typography.Text>,
     },
     {
@@ -138,11 +138,11 @@ export function XrayNodesPage() {
       key: 'outbound',
       width: 160,
       render: (_, record) =>
-        record.outbound_type === 'direct' ? (
+        record.outboundType === 'direct' ? (
           <Typography.Text type="secondary">直连</Typography.Text>
         ) : (
           <Typography.Text>
-            中转 <Typography.Text type="secondary">→</Typography.Text> {record.landing_name ?? '-'}
+            中转 <Typography.Text type="secondary">→</Typography.Text> {record.landingName ?? '-'}
           </Typography.Text>
         ),
     },
@@ -188,7 +188,7 @@ export function XrayNodesPage() {
             loading={testingId === record.id}
             onClick={() => handleTest(record)}
           >
-            {tr ? (tr.ok ? `${tr.latency_ms ?? ''}ms` : '❌') : '测速'}
+            {tr ? (tr.ok ? `${tr.latencyMs ?? ''}ms` : '❌') : '测速'}
           </Button>
         );
       },
@@ -198,7 +198,7 @@ export function XrayNodesPage() {
       key: 'share',
       width: 90,
       render: (_, record) =>
-        record.share_link ? (
+        record.shareLink ? (
           <Button type="link" icon={<CopyOutlined />} onClick={() => handleCopyLink(record)}>
             复制
           </Button>
