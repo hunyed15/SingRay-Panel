@@ -72,7 +72,8 @@ npm run typecheck       # tsc --noEmit(server + web + migrate)
 npm run restore -- <备份文件>   # 从备份恢复数据库(先停面板)
 ```
 
-架构与设计取舍见 [`docs/design.md`](docs/design.md);历次代码审查的发现与处理记录见
+架构与设计取舍见 [`docs/design.md`](docs/design.md);升级/回滚步骤见
+[`docs/upgrade.md`](docs/upgrade.md);历次代码审查的发现与处理记录见
 [`docs/review/01-report-2026-10-19.md`](docs/review/01-report-2026-10-19.md)。
 
 `.env` 会被服务端自动加载（已存在的环境变量优先，等价于 systemd `EnvironmentFile` 的行为）。
