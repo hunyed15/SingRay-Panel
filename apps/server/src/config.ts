@@ -75,7 +75,11 @@ const weakSecrets = [
   ['PANEL_APP_SECRET', config.appSecret],
 ] as const;
 const weak = weakSecrets.filter(([, value]) => isWeakSecret(value)).map(([name]) => name);
-if (weak.length > 0) {
+// 离线运维脚本(如 `npm run restore`)在 import 本模块前设这个变量跳过守卫:
+// 恢复数据库不需要密钥,而最需要恢复的时候往往正是 .env 坏掉的时候。
+// HTTP 服务进程永远不设它,所以线上守卫不受影响。
+const skipGuardForOfflineTool = process.env.PANEL_ALLOW_WEAK_SECRETS === '1';
+if (weak.length > 0 && !skipGuardForOfflineTool) {
   throw new Error(
     `拒绝启动:${weak.join(' 与 ')} 仍是默认值或 .env.example 的示例值。` +
       `请用 openssl rand -hex 32 生成后写入 .env(与 PANEL_HOST 无关,公网/反代部署同样要求)`,

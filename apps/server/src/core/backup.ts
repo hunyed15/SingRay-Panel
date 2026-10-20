@@ -8,7 +8,7 @@
 //      据此判定今日已备份 → 当天不再重试,也没有任何失败记录。
 
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
 
@@ -89,4 +89,48 @@ export function backedUpToday(dir = backupDir()): boolean {
   return listBackups(dir)
     .filter((b) => b.file.includes(`panel-${today}-`))
     .some((b) => isUsableBackup(path.join(dir, b.file)));
+}
+
+/**
+ * 从备份恢复数据库(**必须先停面板**:本函数直接替换文件,运行中的进程会继续用旧句柄)。
+ *
+ * 步骤:校验备份可用 → 给当前库留一份一致性快照 → 原子替换 → 清掉旧库的 -wal/-shm。
+ * 返回快照路径,方便恢复错了再换回来。
+ */
+export function restoreFromBackup(
+  backupFile: string,
+  dbPath = config.dbPath,
+): { restoredFrom: string; snapshot: string | null; bytes: number } {
+  if (dbPath === ':memory:') throw new Error('内存库不支持恢复');
+  if (!existsSync(backupFile)) throw new Error(`备份文件不存在:${backupFile}`);
+  if (!isUsableBackup(backupFile)) throw new Error(`备份文件不可用(无法打开或缺核心表):${backupFile}`);
+
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+  // 恢复前的当前库:优先用 VACUUM INTO(带 WAL 也一致),失败再退回文件拷贝
+  let snapshot: string | null = null;
+  if (existsSync(dbPath)) {
+    snapshot = `${dbPath}.pre-restore-${stamp}.db`;
+    try {
+      const live = new DatabaseSync(dbPath);
+      try {
+        live.exec(`VACUUM INTO '${snapshot.replace(/'/g, "''")}'`);
+      } finally {
+        live.close();
+      }
+    } catch {
+      copyFileSync(dbPath, snapshot);
+    }
+  }
+
+  // 旧库的 -wal/-shm 必须先清掉:它们是旧库的日志,留在原地会盖住刚恢复的数据
+  for (const suffix of ['-wal', '-shm']) {
+    const f = `${dbPath}${suffix}`;
+    if (existsSync(f)) unlinkSync(f);
+  }
+
+  const tmp = `${dbPath}.restore-tmp`;
+  copyFileSync(backupFile, tmp);
+  renameSync(tmp, dbPath); // 同目录原子替换:中途断电也不会留下半截库
+
+  return { restoredFrom: backupFile, snapshot, bytes: statSync(dbPath).size };
 }

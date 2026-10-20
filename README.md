@@ -22,7 +22,7 @@
 
 ### 配置下发
 - **事务化部署**：渲染 → 上传 → 核心校验 → 备份 → 原子替换 → 重启 → **健康检查**；失败会回滚并**重新校验回滚结果**，没有旧配置可回滚时如实报告「未回滚」，失败详情（逐步状态 + 核心日志）在界面可见——部署不会"谎报成功"
-- **备份**：`VACUUM INTO` 一致性快照（含 WAL 已提交数据）→ 校验可打开 → 原子改名落盘，失败不留残留文件、也不会让当天跳过重试；按份数自动清理
+- **备份与恢复**：`VACUUM INTO` 一致性快照（含 WAL 已提交数据）→ 校验可打开 → 原子改名落盘，失败不留残留文件、也不会让当天跳过重试；按份数自动清理。**恢复**用 `npm run restore -- <备份文件>`（先停面板；会先把当前库另存为 `.pre-restore-*.db` 再原子替换，旧库的 `-wal`/`-shm` 一并清掉）
 - 单机部署 / 一键部署全部（并发 ≤3，逐机结果展示）
 - **核心生命周期**：安装（GitHub 下载 + gh-proxy 镜像兜底）/ 重启 / 卸载
 - SSH 命令超时按 quick / config / install 分级，跳板链路自动放宽
@@ -69,6 +69,7 @@ npm run dev             # server(3000) + web(5173);会自动加载仓库根的 .
 npm test                # server(vitest + golden 快照) + web(jsdom 组件测试) + migrate
 npm run lint            # eslint(抓真问题,不做风格检查)
 npm run typecheck       # tsc --noEmit(server + web + migrate)
+npm run restore -- <备份文件>   # 从备份恢复数据库(先停面板)
 ```
 
 架构与设计取舍见 [`docs/design.md`](docs/design.md);历次代码审查的发现与处理记录见

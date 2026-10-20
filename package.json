@@ -15,7 +15,8 @@
     "test": "npm run test --workspace apps/server && npm run test --workspace apps/web && npm run test --workspace tools/migrate",
     "typecheck": "tsc -b apps/server tools/migrate && npm run typecheck --workspace apps/web",
     "lint": "eslint .",
-    "migrate": "node tools/migrate/src/cli.ts"
+    "migrate": "node tools/migrate/src/cli.ts",
+    "restore": "npm run restore --workspace apps/server --"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { runBackupNow, listBackups, backedUpToday } from './backup.js';
+import { runBackupNow, listBackups, backedUpToday, restoreFromBackup } from './backup.js';
 import { config } from '../config.js';
 
 let dir: string;
@@ -82,5 +82,43 @@ describe('backup module', () => {
     expect(left.some((f) => f.includes('20260101'))).toBe(false); // 最旧的被删
     expect(left.some((f) => f.includes('20260104'))).toBe(true); // 较新的旧备份保留
     expect(listBackups(path.join(dir, 'backups')).length).toBe(3);
+  });
+});
+
+describe('restoreFromBackup:备份必须真的能恢复(附录 C 待验证项)', () => {
+  it('造数据 → 备份 → 毁掉当前库 → 恢复 → 数据完好,且坏库留档', () => {
+    const { file } = runBackupNow(live, dbPath);
+    const backupPath = path.join(dir, 'backups', file);
+    expect(existsSync(backupPath)).toBe(true);
+    live.close();
+
+    // 模拟灾难:当前库被写坏(并留下一个同目录的 -wal)
+    writeFileSync(dbPath, 'this-is-not-a-sqlite-file');
+    writeFileSync(`${dbPath}-wal`, 'stale wal');
+
+    const r = restoreFromBackup(backupPath, dbPath);
+    expect(r.restoredFrom).toBe(backupPath);
+    expect(r.bytes).toBeGreaterThan(0);
+    expect(r.snapshot).toBeTruthy(); // 恢复前的库(哪怕是坏的)也留一份,便于回退
+
+    const restored = new DatabaseSync(dbPath, { readOnly: true });
+    expect((restored.prepare('SELECT COUNT(*) AS c FROM servers').get() as { c: number }).c).toBe(1);
+    restored.close();
+    // 旧库的 -wal 必须被清掉,否则会盖住刚恢复的数据
+    expect(existsSync(`${dbPath}-wal`)).toBe(false);
+  });
+
+  it('不可用的备份 → 拒绝恢复,当前库原封不动', () => {
+    const bad = path.join(dir, 'bad.db');
+    writeFileSync(bad, 'garbage');
+    expect(() => restoreFromBackup(bad, dbPath)).toThrow(/不可用/);
+    // 当前库还在且能读
+    expect((live.prepare('SELECT COUNT(*) AS c FROM servers').get() as { c: number }).c).toBe(1);
+    live.close();
+  });
+
+  it('备份文件不存在 → 明确报错', () => {
+    expect(() => restoreFromBackup(path.join(dir, 'nope.db'), dbPath)).toThrow(/不存在/);
+    live.close();
   });
 });

@@ -203,6 +203,70 @@ describe('api integration (fastify.inject)', () => {
     expect(badSub.statusCode).toBe(404);
   });
 
+  it('订阅保持各客户端自己的字段名(/api 的 camelize 不该污染 /sub)', async () => {
+    const auth = { authorization: `Bearer ${token}` };
+    const srv = await app.inject({
+      method: 'POST',
+      url: '/api/servers',
+      headers: auth,
+      payload: {
+        name: 'sub-probe',
+        role: 'relay',
+        control: 'ssh',
+        host: '10.9.8.7',
+        sshPort: 22,
+        sshUser: 'root',
+        sshAuthType: 'password',
+        sshAuthSecret: 'x',
+      },
+    });
+    expect(srv.statusCode).toBe(200);
+    const serverId = srv.json().id as number;
+
+    const node = await app.inject({
+      method: 'POST',
+      url: '/api/nodes',
+      headers: auth,
+      payload: { template: 'vmess-ws-tls', name: 'subvmess', serverId, port: 31111 },
+    });
+    expect(node.statusCode).toBe(200);
+
+    await app.inject({ method: 'PUT', url: '/api/settings', headers: auth, payload: { subSlug: 'sub-format-test' } });
+
+    // sing-box:outbound 的字段名是 sing-box 自己的 schema(server_port),被 camelize 会直接不可用
+    const sb = await app.inject({ method: 'GET', url: '/sub/singbox/sub-format-test' });
+    expect(sb.statusCode).toBe(200);
+    expect(sb.headers['content-type']).toContain('application/json');
+    expect(sb.body).toContain('server_port');
+    expect(sb.body).not.toContain('serverPort');
+    expect(() => JSON.parse(sb.body)).not.toThrow();
+
+    // clash/mihomo:YAML 里的 proxies
+    const clash = await app.inject({
+      method: 'GET',
+      url: '/sub/sub-format-test',
+      headers: { 'user-agent': 'clash-verge/1.0' },
+    });
+    expect(clash.statusCode).toBe(200);
+    expect(clash.headers['content-type']).toContain('yaml');
+    expect(clash.body).toContain('proxies:');
+
+    // 自适应:sing-box UA → JSON;无 UA → base64 文本
+    const byUa = await app.inject({
+      method: 'GET',
+      url: '/sub/sub-format-test',
+      headers: { 'user-agent': 'sing-box 1.9.0' },
+    });
+    expect(byUa.headers['content-type']).toContain('application/json');
+    const plain = await app.inject({ method: 'GET', url: '/sub/sub-format-test' });
+    expect(plain.headers['content-type']).toContain('text/plain');
+    expect(plain.body).not.toContain('server_port'); // base64,不该是明文
+
+    // 清理(删节点会连带清规则,再删机器)
+    await app.inject({ method: 'DELETE', url: `/api/nodes/${node.json().id as number}`, headers: auth });
+    await app.inject({ method: 'DELETE', url: `/api/servers/${serverId}`, headers: auth });
+  });
+
   it('port whitelist (NAT) gates node/forward ports + batch preview', async () => {
     const auth = { authorization: `Bearer ${token}` };
 
