@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getDb } from '../db/client.js';
 import { HttpError } from '../services/errors.js';
 import { probeNode } from '../core/probe/index.js';
+import { listProbes, probeAllNodes } from '../services/autoProbe.js';
 import type { Row } from '../services/row.js';
 
 const idParam = z.object({ id: z.coerce.number().int() });
@@ -38,5 +39,14 @@ export default async function testRoutes(app: FastifyInstance): Promise<void> {
     const node = getDb().prepare('SELECT * FROM xray_nodes WHERE id = ?').get(id) as Row | undefined;
     if (!node) throw new HttpError(404, 'Xray 节点不存在');
     return probeFromRow(node);
+  });
+
+  /** 最近一次自动探测结果(所有节点) */
+  app.get('/probes', async () => listProbes(getDb()));
+
+  /** 立刻跑一轮自动探测(定时任务跑的也是这个) */
+  app.post('/probe-all', async () => {
+    const r = await probeAllNodes(getDb());
+    return { checked: r.checked, ok: r.ok, failed: r.failed };
   });
 }

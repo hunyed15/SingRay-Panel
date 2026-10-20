@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, App, Badge, Button, Flex, Input, Popconfirm, Switch, Table, Tag, Typography } from 'antd';
+import { Alert, App, Badge, Button, Flex, Input, Popconfirm, Switch, Table, Tag, Tooltip, Typography } from 'antd';
 import { CopyOutlined, DeleteOutlined, EditOutlined, PlusOutlined, SafetyOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as api from '../services/api';
@@ -25,17 +25,21 @@ export function NodesPage() {
   const [testResults, setTestResults] = useState<Record<number, NodeTestResult>>({});
 
   const { data, loading, error, reload } = useAsyncData(async () => {
-    const [nodes, servers, snis] = await Promise.all([
+    const [nodes, servers, snis, probes] = await Promise.all([
       api.getNodes(),
       api.getServers(),
       api.getSnis(),
+      // 探测结果拿不到不影响主流程(可能还没跑过第一轮)
+      api.getProbes().catch(() => [] as api.ProbeRow[]),
     ]);
-    return { nodes, servers, snis };
+    return { nodes, servers, snis, probes };
   });
 
   const nodes = data?.nodes ?? [];
   const servers: Server[] = data?.servers ?? [];
   const snis: SniItem[] = data?.snis ?? [];
+  // 自动探测结果:key = `${nodeType}:${nodeId}`
+  const probes = new Map((data?.probes ?? []).map((p) => [`${p.nodeType}:${p.nodeId}`, p]));
   const landings = servers.filter((s) => s.role === 'landing');
   const onlineServerIds = new Set(
     servers.filter((s) => s.ping_status === 'online').map((s) => s.id),
@@ -246,6 +250,27 @@ export function NodesPage() {
     },
   ];
 
+  /** 自动探测(services/autoProbe.ts 定时写入,每节点一条最近结果) */
+  const probeColumn: ColumnsType<NodeItem>[number] = {
+    title: '探测',
+    key: 'probe',
+    width: 100,
+    render: (_, n) => {
+      const p = probes.get(`singbox:${n.id}`);
+      if (!p) return <Tag>未探测</Tag>;
+      const agoMin = Math.max(0, Math.round((Date.now() - Date.parse(p.checkedAt)) / 60_000));
+      return p.ok ? (
+        <Tooltip title={`${p.latencyMs}ms · ${agoMin > 0 ? `${agoMin} 分钟前` : '刚刚'}`}>
+          <Tag color="success">通</Tag>
+        </Tooltip>
+      ) : (
+        <Tooltip title={p.detail || '连接失败'}>
+          <Tag color="error">不通</Tag>
+        </Tooltip>
+      );
+    },
+  };
+
   return (
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center">
@@ -284,7 +309,7 @@ export function NodesPage() {
 
       <Table<NodeItem>
         rowKey="id"
-        columns={columns}
+        columns={[...columns, probeColumn]}
         dataSource={filteredNodes}
         loading={loading}
         pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (t) => `共 ${t} 条` }}

@@ -27,6 +27,7 @@ import { registerJob, startScheduler } from './core/scheduler.js';
 import { runBackupNow, backedUpToday } from './core/backup.js';
 import { runHealthCheckCycle } from './core/healthcheck.js';
 import { collectAllTraffic } from './core/traffic.js';
+import { probeAllNodes } from './services/autoProbe.js';
 import { recordRun } from './core/alerts.js';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -128,6 +129,17 @@ if (isMain) {
       }));
       registerJob('healthcheck', config.healthIntervalMin * 60_000, job('healthcheck', () => runHealthCheckCycle(db)));
       registerJob('traffic', 5 * 60_000, job('traffic', () => collectAllTraffic(db)));
+      // 自动可用性探测:从面板侧连一下每个节点的实际入口(0 = 关闭)
+      if (config.probeIntervalMin > 0) {
+        registerJob(
+          'probe',
+          config.probeIntervalMin * 60_000,
+          job('probe', async () => {
+            const r = await probeAllNodes(db);
+            return `探测 ${r.checked} 个节点,失败 ${r.failed}`;
+          }),
+        );
+      }
       startScheduler();
       await app.listen({ port: config.port, host: config.host });
     })

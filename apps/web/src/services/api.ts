@@ -482,6 +482,22 @@ export const detectIpStacks = (): Promise<{ ok: true; summary: string }> =>
 
 export type LifecycleAction = 'install' | 'restart' | 'uninstall' | 'rollback';
 
+/** 自动探测结果(services/autoProbe.ts 定时写入,每节点一行) */
+export interface ProbeRow {
+  nodeType: 'singbox' | 'xray';
+  nodeId: number;
+  nodeName: string;
+  ok: boolean;
+  latencyMs: number;
+  detail: string;
+  checkedAt: string;
+}
+
+export const getProbes = (): Promise<ProbeRow[]> => requestList<ProbeRow>('/api/test/probes');
+
+export const probeAll = (): Promise<{ checked: number; ok: number; failed: number }> =>
+  request('/api/test/probe-all', { method: 'POST' });
+
 /** 核心生命周期:install/restart/uninstall(sing-box: /:id/<action>;xray: /:id/xray-<action>,与旧版路径一致) */
 export const serverLifecycle = (
   id: number,
